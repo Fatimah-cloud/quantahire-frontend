@@ -39,8 +39,11 @@ export default function BrowseJobs() {
         const user = candidateEmail ? { email: candidateEmail, id: candidateId, full_name: "" } : null;
         setCurrentUser(user);
 
-        // Fetch only open jobs from QuantaHire
-        const openJobs = await quantaClient.entities.Job.filter({ status: 'Open' });
+        // Fetch all jobs and filter in-memory to allow open or reopened statuses case-insensitively
+        const allJobs = await quantaClient.entities.Job.list();
+        const openJobs = (allJobs || []).filter(
+          (j) => (j.status || "").toLowerCase() === "open" || (j.status || "").toLowerCase() === "reopened"
+        );
         setJobs(openJobs || []);
 
         // Check already applied
@@ -271,6 +274,8 @@ export default function BrowseJobs() {
             <div className="p-6 border-t border-border flex gap-3">
               {appliedJobIds.has(selectedJob.id) ? (
                 <div className="flex-1 flex items-center justify-center gap-2 text-green-600 font-semibold"><CheckCircle className="w-4 h-4" /> Already Applied</div>
+              ) : (selectedJob.status && (selectedJob.status.toLowerCase() === "closed" || selectedJob.status.toLowerCase() === "draft")) ? (
+                <div className="flex-1 flex items-center justify-center gap-2 text-red-500 font-semibold">This job is not accepting applications</div>
               ) : (
                 <Button className="flex-1 bg-primary hover:bg-primary/90 rounded-xl" onClick={() => { setSelectedJob(null); openApplyModal(selectedJob); }}>Apply Now</Button>
               )}

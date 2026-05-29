@@ -100,7 +100,7 @@ export default function RecruiterDashboard() {
   };
 
   const filteredJobs = jobs.filter((job) => {
-    const matchesTab = activeTab === "All Jobs" || job.status === activeTab;
+    const matchesTab = activeTab === "All Jobs" || (job.status || "").toLowerCase() === activeTab.toLowerCase();
     const matchesSearch = (job.title || "").toLowerCase().includes(search.toLowerCase());
     return matchesTab && matchesSearch;
   });
@@ -231,7 +231,7 @@ export default function RecruiterDashboard() {
           {/* Status Filter Tabs */}
           <div className="flex flex-wrap gap-2 mb-4">
             {TABS.map((tab) => {
-              const count = tab === "All Jobs" ? jobs.length : jobs.filter((j) => j.status === tab).length;
+              const count = tab === "All Jobs" ? jobs.length : jobs.filter((j) => (j.status || "").toLowerCase() === tab.toLowerCase()).length;
               return (
                 <button
                   key={tab}
