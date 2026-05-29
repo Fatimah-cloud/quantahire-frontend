@@ -58,7 +58,15 @@ export default function RecruiterManagement() {
   const handleConfirm = async () => {
     const isActivate = confirmDialog.action === "activate";
     const newStatus = isActivate ? "approved" : "suspended";
+    
+    const recruiter = recruiters.find(r => r.id === confirmDialog.id);
+    
     await quantaClient.asServiceRole.entities.RecruiterProfile.update(confirmDialog.id, { status: newStatus });
+    
+    if (recruiter && recruiter.user_id) {
+      await quantaClient.entities.User.update(recruiter.user_id, { is_active: isActivate });
+    }
+    
     setRecruiters((prev) =>
       prev.map((r) => r.id === confirmDialog.id ? { ...r, status: newStatus } : r)
     );

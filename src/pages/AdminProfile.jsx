@@ -20,7 +20,7 @@ export default function AdminProfile() {
       const authed = await quantaClient.auth.isAuthenticated();
       if (!authed) { navigate("/admin-auth"); return; }
       const me = await quantaClient.auth.me();
-      if (me?.role !== "admin" || me?.email !== "shahadym0@gmail.com") { navigate("/"); return; }
+      if (me?.role !== "admin") { navigate("/"); return; }
       setAdminEmail(me.email);
       setAdminName(me.full_name || "");
 

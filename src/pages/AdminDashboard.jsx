@@ -45,17 +45,17 @@ export default function AdminDashboard() {
       const authed = await quantaClient.auth.isAuthenticated();
       if (!authed) { navigate("/admin-auth"); setChecking(false); return; }
       const me = await quantaClient.auth.me();
-      if (me?.role !== "admin" || me?.email !== "shahadym0@gmail.com") { navigate("/"); setChecking(false); return; }
+      if (me?.role !== "admin") { navigate("/"); setChecking(false); return; }
       setAdminEmail(me.email);
 
       // Fetch from RecruiterProfile, Jobs, and Applications
-      const [recruitersRes, jobsData, appsData] = await Promise.all([
-        quantaClient.functions.invoke('getAllRecruiters', {}),
+      const [recruitersData, jobsData, appsData] = await Promise.all([
+        quantaClient.entities.RecruiterProfile.list(),
         quantaClient.entities.Job.list(),
         quantaClient.entities.Application.list(),
       ]);
 
-      setRecruiters(recruitersRes.data?.recruiters || []);
+      setRecruiters(recruitersData || []);
       setJobs(jobsData || []);
       setApplications(appsData || []);
       setLoading(false);
@@ -79,9 +79,13 @@ export default function AdminDashboard() {
 
   const handleApproveRecruiter = async (id) => {
     try {
-      await quantaClient.functions.invoke('approveRecruiter', { recruiterId: id, action: 'approve' });
-      const updated = await quantaClient.functions.invoke('getAllRecruiters', {});
-      setRecruiters(updated.data?.recruiters || []);
+      const recruiter = recruiters.find(r => r.id === id);
+      await quantaClient.entities.RecruiterProfile.update(id, { status: 'approved' });
+      if (recruiter && recruiter.user_id) {
+        await quantaClient.entities.User.update(recruiter.user_id, { is_active: true });
+      }
+      const updated = await quantaClient.entities.RecruiterProfile.list();
+      setRecruiters(updated || []);
       toast({ description: "Recruiter approved successfully" });
     } catch (err) {
       toast({ description: "Failed to approve recruiter" });
@@ -91,9 +95,13 @@ export default function AdminDashboard() {
 
   const handleBlockRecruiter = async (id) => {
     try {
-      await quantaClient.functions.invoke('approveRecruiter', { recruiterId: id, action: 'block' });
-      const updated = await quantaClient.functions.invoke('getAllRecruiters', {});
-      setRecruiters(updated.data?.recruiters || []);
+      const recruiter = recruiters.find(r => r.id === id);
+      await quantaClient.entities.RecruiterProfile.update(id, { status: 'blocked' });
+      if (recruiter && recruiter.user_id) {
+        await quantaClient.entities.User.update(recruiter.user_id, { is_active: false });
+      }
+      const updated = await quantaClient.entities.RecruiterProfile.list();
+      setRecruiters(updated || []);
       toast({ description: "Recruiter blocked successfully" });
     } catch (err) {
       toast({ description: "Failed to block recruiter" });
@@ -166,6 +174,10 @@ export default function AdminDashboard() {
 
           <Button className="rounded-xl gap-2 h-11 px-5 bg-primary hover:bg-primary/90" onClick={() => navigate("/admin-all-jobs")}>
             <Briefcase className="w-4 h-4" />All Jobs & CVs
+          </Button>
+
+          <Button variant="outline" className="rounded-xl gap-2 h-11 px-5 animate-pulse border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100" onClick={() => navigate("/admin-management")}>
+            <Shield className="w-4 h-4" />Manage Admins
           </Button>
 
           <Button variant="outline" className="rounded-xl gap-2 h-11 px-5" onClick={() => navigate("/psych-admin")}>

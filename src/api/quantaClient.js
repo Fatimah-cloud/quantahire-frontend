@@ -37,7 +37,8 @@ function makeRealEntity(entityName) {
     AdminProfile: "admins",
     InterviewSlot: "interview-slots",
     AssessmentResult: "assessments",
-    PsychQuestion: "psych-questions"
+    PsychQuestion: "psych-questions",
+    User: "users"
   };
   
   const collection = pluralMap[entityName] || entityName.toLowerCase() + "s";
@@ -98,7 +99,8 @@ const entities = {
   AdminProfile: makeRealEntity("AdminProfile"),
   InterviewSlot: makeRealEntity("InterviewSlot"),
   AssessmentResult: makeRealEntity("AssessmentResult"),
-  PsychQuestion: makeRealEntity("PsychQuestion")
+  PsychQuestion: makeRealEntity("PsychQuestion"),
+  User: makeRealEntity("User")
 };
 
 const auth = {
