@@ -67,7 +67,7 @@ export default function AdminDashboard() {
   const pendingRecruiters = recruiters.filter((r) => r.status === "pending");
   const activeRecruiters = recruiters.filter((r) => r.status === "approved");
   const blockedRecruiters = recruiters.filter((r) => r.status === "blocked");
-  const activeJobs = jobs.filter((j) => j.status === "open");
+  const activeJobs = jobs.filter((j) => j.status && (j.status.toLowerCase() === "open" || j.status.toLowerCase() === "reopened"));
   const scoredApps = applications.filter((a) => a.match_score);
   const avgScore = scoredApps.length
     ? Math.round(scoredApps.reduce((s, a) => s + a.match_score, 0) / scoredApps.length)

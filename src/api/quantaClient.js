@@ -168,7 +168,7 @@ const integrations = {
       const formData = new FormData();
       formData.append("file", file);
       
-      const response = await fetch("http://localhost:8000/api/upload/", {
+      const response = await fetch(`${API_BASE_URL}/upload/`, {
         method: "POST",
         body: formData
       });
@@ -204,7 +204,9 @@ const functions = {
               full_name,
               role,
               company: payload.company || "",
-              certificate_url: payload.certificate_url || ""
+              certificate_url: payload.certificate_url || "",
+              country: payload.country || "",
+              phone: payload.phone || ""
             })
           });
           

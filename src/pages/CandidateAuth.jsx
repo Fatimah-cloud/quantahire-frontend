@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Sparkles, ArrowLeft, Users, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Sparkles, ArrowLeft, Users, Eye, EyeOff, Loader2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,17 @@ export default function CandidateAuth() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
+  const [errors, setErrors] = useState({});
   const navigate = useNavigate();
+
+  const passwordRules = {
+    minLength: form.password.length >= 8,
+    hasUpper: /[A-Z]/.test(form.password),
+    hasLower: /[a-z]/.test(form.password),
+    hasNumber: /[0-9]/.test(form.password),
+    hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(form.password)
+  };
+  const isPasswordValid = passwordRules.minLength && passwordRules.hasUpper && passwordRules.hasLower && passwordRules.hasNumber && passwordRules.hasSpecial;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -49,18 +59,39 @@ export default function CandidateAuth() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
-    if (!form.fullName || !form.email || !form.password || !form.confirm) {
-      setError("Please fill in all fields.");
+    setErrors({});
+
+    const newErrors = {};
+    if (!form.fullName.trim()) newErrors.fullName = "Full Name is required.";
+    if (!form.email.trim()) newErrors.email = "Email Address is required.";
+    
+    if (!form.password) {
+      newErrors.password = "Password is required.";
+    } else {
+      if (form.password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters.";
+      } else if (!/[A-Z]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one uppercase letter.";
+      } else if (!/[a-z]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one lowercase letter.";
+      } else if (!/[0-9]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one number.";
+      } else if (!/[!@#$%^&*(),.?":{}|<>]/.test(form.password)) {
+        newErrors.password = "Password must contain at least one special character.";
+      }
+    }
+
+    if (!form.confirm) {
+      newErrors.confirm = "Confirm Password is required.";
+    } else if (form.password !== form.confirm) {
+      newErrors.confirm = "Passwords do not match.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
-    if (form.password !== form.confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
+
     setLoading(true);
     try {
       const res = await quantaClient.functions.invoke("authRegister", {
@@ -238,10 +269,18 @@ export default function CandidateAuth() {
                     type="text"
                     placeholder="John Doe"
                     value={form.fullName}
-                    onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                    className="h-12 rounded-xl border-border"
+                    onChange={(e) => {
+                      setForm({ ...form, fullName: e.target.value });
+                      if (errors.fullName) setErrors({ ...errors, fullName: null });
+                    }}
+                    className={`h-12 rounded-xl border-border ${errors.fullName ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                     required
                   />
+                  {errors.fullName && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.fullName}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -251,10 +290,18 @@ export default function CandidateAuth() {
                     type="email"
                     placeholder="candidate@example.com"
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="h-12 rounded-xl border-border"
+                    onChange={(e) => {
+                      setForm({ ...form, email: e.target.value });
+                      if (errors.email) setErrors({ ...errors, email: null });
+                    }}
+                    className={`h-12 rounded-xl border-border ${errors.email ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                     required
                   />
+                  {errors.email && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.email}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -265,8 +312,11 @@ export default function CandidateAuth() {
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      className="h-12 rounded-xl border-border pr-11"
+                      onChange={(e) => {
+                        setForm({ ...form, password: e.target.value });
+                        if (errors.password) setErrors({ ...errors, password: null });
+                      }}
+                      className={`h-12 rounded-xl border-border pr-11 ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                       required
                     />
                     <button
@@ -277,6 +327,38 @@ export default function CandidateAuth() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.password}
+                    </p>
+                  )}
+                  {form.password && (
+                    <div className="mt-2.5 space-y-1.5 rounded-xl border border-muted bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <p className="font-semibold text-foreground">Password requirements:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                        <div className={`flex items-center gap-1.5 transition-colors ${passwordRules.minLength ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                          {passwordRules.minLength ? <Check className="w-3.5 h-3.5" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 ml-1 shrink-0" />}
+                          <span>Min. 8 characters</span>
+                        </div>
+                        <div className={`flex items-center gap-1.5 transition-colors ${passwordRules.hasUpper ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                          {passwordRules.hasUpper ? <Check className="w-3.5 h-3.5" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 ml-1 shrink-0" />}
+                          <span>One uppercase letter</span>
+                        </div>
+                        <div className={`flex items-center gap-1.5 transition-colors ${passwordRules.hasLower ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                          {passwordRules.hasLower ? <Check className="w-3.5 h-3.5" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 ml-1 shrink-0" />}
+                          <span>One lowercase letter</span>
+                        </div>
+                        <div className={`flex items-center gap-1.5 transition-colors ${passwordRules.hasNumber ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                          {passwordRules.hasNumber ? <Check className="w-3.5 h-3.5" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 ml-1 shrink-0" />}
+                          <span>One number</span>
+                        </div>
+                        <div className={`flex items-center gap-1.5 transition-colors ${passwordRules.hasSpecial ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                          {passwordRules.hasSpecial ? <Check className="w-3.5 h-3.5" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 ml-1 shrink-0" />}
+                          <span>One special char</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -287,8 +369,11 @@ export default function CandidateAuth() {
                       type={showConfirm ? "text" : "password"}
                       placeholder="••••••••"
                       value={form.confirm}
-                      onChange={(e) => setForm({ ...form, confirm: e.target.value })}
-                      className="h-12 rounded-xl border-border pr-11"
+                      onChange={(e) => {
+                        setForm({ ...form, confirm: e.target.value });
+                        if (errors.confirm) setErrors({ ...errors, confirm: null });
+                      }}
+                      className={`h-12 rounded-xl border-border pr-11 ${errors.confirm ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                       required
                     />
                     <button
@@ -299,6 +384,16 @@ export default function CandidateAuth() {
                       {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {errors.confirm && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.confirm}
+                    </p>
+                  )}
+                  {form.confirm && form.password !== form.confirm && !errors.confirm && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Passwords do not match
+                    </p>
+                  )}
                 </div>
 
                 <Button
@@ -312,7 +407,7 @@ export default function CandidateAuth() {
 
                 <p className="text-center text-sm text-muted-foreground">
                   Already have an account?{" "}
-                  <button type="button" onClick={() => { setTab("login"); setError(""); }} className="text-primary font-medium hover:underline">
+                  <button type="button" onClick={() => { setTab("login"); setError(""); setErrors({}); }} className="text-primary font-medium hover:underline">
                     Login
                   </button>
                 </p>
