@@ -37,13 +37,13 @@ export default function CandidateAuth() {
     try {
       const res = await quantaClient.functions.invoke("authLogin", { email: form.email.trim().toLowerCase(), password: form.password });
       if (res.data.error) {
-        setError(res.data.error);
+        setError("Invalid email or password. Please try again.");
         setLoading(false);
         return;
       }
       const user = res.data.user;
       if (user.role !== 'candidate') {
-        setError("No candidate account found. Please register first.");
+        setError("Invalid email or password. Please try again.");
         setLoading(false);
         return;
       }
@@ -51,7 +51,7 @@ export default function CandidateAuth() {
       localStorage.setItem("candidateId", user.id);
       navigate("/candidate-dashboard");
     } catch (err) {
-      setError("Login failed. Please try again.");
+      setError("Invalid email or password. Please try again.");
     }
     setLoading(false);
   };
@@ -214,21 +214,32 @@ export default function CandidateAuth() {
                     type="email"
                     placeholder="candidate@example.com"
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    onChange={(e) => {
+                      setForm({ ...form, email: e.target.value });
+                      setError("");
+                    }}
                     className="h-12 rounded-xl border-border"
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline transition-colors">
+                      Forgot Password?
+                    </Link>
+                  </div>
                   <div className="relative">
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      onChange={(e) => {
+                        setForm({ ...form, password: e.target.value });
+                        setError("");
+                      }}
                       className="h-12 rounded-xl border-border pr-11"
                       required
                     />

@@ -38,7 +38,8 @@ function makeRealEntity(entityName) {
     InterviewSlot: "interview-slots",
     AssessmentResult: "assessments",
     PsychQuestion: "psych-questions",
-    User: "users"
+    User: "users",
+    Notification: "notifications"
   };
   
   const collection = pluralMap[entityName] || entityName.toLowerCase() + "s";
@@ -100,7 +101,8 @@ const entities = {
   InterviewSlot: makeRealEntity("InterviewSlot"),
   AssessmentResult: makeRealEntity("AssessmentResult"),
   PsychQuestion: makeRealEntity("PsychQuestion"),
-  User: makeRealEntity("User")
+  User: makeRealEntity("User"),
+  Notification: makeRealEntity("Notification")
 };
 
 const auth = {
@@ -264,7 +266,7 @@ const functions = {
           const res = await apiFetch("/match/process", {
             method: "POST",
             body: JSON.stringify({
-              cv_url: payload.resume_url,
+              cv_url: payload.cv_url || payload.resume_url || "",
               application_id: payload.application_id || "",
               job_id: payload.job_id || "",
               job_title: payload.job_title || "",
@@ -301,6 +303,32 @@ const functions = {
       
       case "sendCandidateEmails": {
         return { data: { success: true } };
+      }
+      
+      case "forgotPassword": {
+        const { email } = payload;
+        try {
+          const res = await apiFetch("/auth/forgot-password", {
+            method: "POST",
+            body: JSON.stringify({ email })
+          });
+          return { data: res };
+        } catch (e) {
+          return { data: { error: e.message } };
+        }
+      }
+      
+      case "resetPassword": {
+        const { token, password } = payload;
+        try {
+          const res = await apiFetch("/auth/reset-password", {
+            method: "POST",
+            body: JSON.stringify({ token, password })
+          });
+          return { data: res };
+        } catch (e) {
+          return { data: { error: e.message } };
+        }
       }
       
       default:

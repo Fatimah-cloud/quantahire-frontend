@@ -1,10 +1,27 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Loader2, Save, CheckCircle, X, FileText, Trophy, Brain, Briefcase, BarChart2, Calendar, Upload } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, Save, CheckCircle, X, FileText, Trophy, Brain, Briefcase, BarChart2, Calendar, Upload, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { quantaClient } from "@/api/quantaClient";
+import { useToast } from "@/components/ui/use-toast";
+
+function ConfirmDialog({ open, title, message, confirmLabel, confirmClass, onConfirm, onCancel }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-4 border border-border">
+        <h3 className="font-semibold text-foreground text-lg">{title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
+        <div className="flex gap-3 justify-end pt-2">
+          <Button variant="outline" className="rounded-xl" onClick={onCancel}>Cancel</Button>
+          <Button className={`rounded-xl ${confirmClass}`} onClick={onConfirm}>{confirmLabel}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const EDU_LEVELS = ["High School", "Bachelor", "Master", "PhD"];
 const EXP_OPTIONS = Array.from({ length: 22 }, (_, i) => i < 21 ? String(i) : "20+");
@@ -44,6 +61,7 @@ function SkillsInput({ skills, onChange }) {
 
 export default function CandidateProfilePage() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const photoRef = useRef(null);
   const cvRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +69,8 @@ export default function CandidateProfilePage() {
   const [saved, setSaved] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [cvUploading, setCvUploading] = useState(false);
+  const [cvDeleting, setCvDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [candidateRecord, setCandidateRecord] = useState(null);
   const [applications, setApplications] = useState([]);
   const [assessmentResult, setAssessmentResult] = useState(null);
@@ -156,6 +176,57 @@ export default function CandidateProfilePage() {
       console.error("CV upload and auto-save failed:", err);
     } finally {
       setCvUploading(false);
+    }
+  };
+
+  const handleCvDelete = async () => {
+    setCvDeleting(true);
+    try {
+      const token = localStorage.getItem("qh_token");
+      const response = await fetch("http://127.0.0.1:8000/api/candidate/cv", {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to delete CV");
+      }
+      
+      // Update form state
+      setForm(f => ({
+        ...f,
+        cv_url: "",
+        cv_filename: "",
+        cv_uploaded_at: ""
+      }));
+      
+      // Update candidateRecord state
+      if (candidateRecord) {
+        setCandidateRecord(prev => ({
+          ...prev,
+          cv_url: "",
+          cv_filename: "",
+          cv_uploaded_at: ""
+        }));
+      }
+      
+      toast({
+        title: "Success",
+        description: "CV deleted successfully.",
+      });
+      setShowDeleteConfirm(false);
+    } catch (err) {
+      console.error("Failed to delete CV:", err);
+      toast({
+        title: "Error deleting CV",
+        description: err.message || "Failed to delete CV. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setCvDeleting(false);
     }
   };
 
@@ -314,9 +385,19 @@ export default function CandidateProfilePage() {
               </div>
               <div className="flex items-center gap-2">
                 <a href={form.cv_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-accent transition-colors">View CV</a>
-                <Button variant="outline" size="sm" onClick={() => cvRef.current?.click()} disabled={cvUploading} className="rounded-xl text-xs gap-1.5">
+                <Button variant="outline" size="sm" onClick={() => cvRef.current?.click()} disabled={cvUploading || cvDeleting} className="rounded-xl text-xs gap-1.5">
                   {cvUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                   Replace
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={cvDeleting || cvUploading}
+                  className="rounded-xl text-xs border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete CV
                 </Button>
               </div>
             </div>
@@ -455,6 +536,16 @@ export default function CandidateProfilePage() {
             </div>
           </div>
         )}
+        {/* Deletion Dialog */}
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          title="Delete your CV?"
+          message="Are you sure you want to delete your CV? This action cannot be undone."
+          confirmLabel={cvDeleting ? "Deleting..." : "Yes, Delete"}
+          confirmClass="bg-red-600 hover:bg-red-700 text-white"
+          onConfirm={handleCvDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       </div>
     </div>
   );

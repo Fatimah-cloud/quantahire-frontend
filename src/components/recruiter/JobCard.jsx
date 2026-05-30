@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Trash2, XCircle, RefreshCw, Clock, MapPin, Users, ChevronDown, ChevronUp, DollarSign, Pencil, Check, X } from "lucide-react";
+import { Sparkles, Trash2, XCircle, RefreshCw, Clock, MapPin, Users, ChevronDown, ChevronUp, DollarSign, Pencil, Check, X, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +35,30 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showApps, setShowApps] = useState(false);
+  const [apps, setApps] = useState([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+
+  const fetchApplications = async () => {
+    setLoadingApps(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/applications/job/${job.id}`, {
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setApps(data);
+      } else {
+        console.error("Failed to fetch applications");
+      }
+    } catch (err) {
+      console.error("Error fetching applications:", err);
+    } finally {
+      setLoadingApps(false);
+    }
+  };
 
   // Form states
   const [editTitle, setEditTitle] = useState(job.title || "");
@@ -128,12 +152,19 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
         console.error("Match session re-initialization failed:", err);
       }
 
-      toast({ description: "Job updated and candidate rankings re-calculated successfully." });
+      toast({
+        title: "Success",
+        description: "Job updated and candidate rankings re-calculated successfully.",
+      });
       setIsEditing(false);
       onJobUpdated();
     } catch (error) {
       console.error("Failed to update job or re-rank candidates:", error);
-      toast({ description: "Failed to update job or re-rank candidates." });
+      toast({
+        title: "Error updating job",
+        description: error.message || "Failed to update job or re-rank candidates.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -219,6 +250,7 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
           <Button
             variant="outline"
             onClick={() => {
+              console.log("Cancel clicked – closing form");
               setIsEditing(false);
               // Reset values
               setEditTitle(job.title || "");
@@ -238,12 +270,24 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
             Cancel
           </Button>
           <Button
-            onClick={() => {
+            onClick={async () => {
+              console.log("Save Changes clicked – sending API request");
               if (!editTitle.trim()) {
                 alert("Job title is required.");
                 return;
               }
-              setDialog("save");
+              await handleSave({
+                title: editTitle,
+                description: editDescription,
+                skills: (editSkills || "").split(",").map((s) => s.trim()).filter(Boolean),
+                responsibilities: (editResponsibilities || "").split("\n").map((r) => r.trim()).filter(Boolean),
+                benefits: (editBenefits || "").split("\n").map((b) => b.trim()).filter(Boolean),
+                location: editLocation,
+                salary: editSalary,
+                type: editType,
+                arrangement: editArrangement,
+                level: editLevel,
+              });
             }}
             disabled={loading}
             className="rounded-xl bg-primary hover:bg-primary/90 h-10 px-5 gap-1.5"
@@ -267,7 +311,12 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <h3 className="font-semibold text-foreground truncate">{job.title}</h3>
+              <h3 
+                onClick={onNavigateRank}
+                className="font-semibold text-foreground truncate cursor-pointer hover:text-primary hover:underline transition-all"
+              >
+                {job.title}
+              </h3>
               <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium capitalize ${STATUS_STYLES[status.toLowerCase()] || STATUS_STYLES.draft}`}>
                 {status.toLowerCase()}
               </span>
@@ -308,7 +357,7 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
             onClick={onNavigateRank}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Rank All
+            View & Rank
           </Button>
 
           {isOwner && (
@@ -356,14 +405,28 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
         </div>
         </div>
 
-        {/* Toggle Details Button */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-accent/40 py-2 border-t border-border transition-colors"
-        >
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {expanded ? "Hide Details" : "View Job Details & Requirements"}
-        </button>
+        {/* Toggle details and applications */}
+        <div className="flex border-t border-border">
+          <button
+            onClick={() => { setExpanded(!expanded); setShowApps(false); }}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-accent/40 py-2.5 border-r border-border transition-colors font-medium"
+          >
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {expanded ? "Hide Details" : "Job Details"}
+          </button>
+          <button
+            onClick={() => { 
+              const nextShow = !showApps;
+              setShowApps(nextShow); 
+              setExpanded(false); 
+              if (nextShow) fetchApplications(); 
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-accent/40 py-2.5 transition-colors font-medium"
+          >
+            {showApps ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {showApps ? "Hide Applications" : `Applications (${appCount})`}
+          </button>
+        </div>
 
         {/* Expanded Details */}
         {expanded && (
@@ -415,6 +478,72 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
             )}
           </div>
         )}
+
+        {/* Applications List */}
+        {showApps && (
+          <div className="px-5 pb-5 pt-4 border-t border-border space-y-4 bg-[#F9F9FB]">
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Job Applications & Submitted CVs
+              </h4>
+            </div>
+            
+            {loadingApps ? (
+              <div className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                Loading applications...
+              </div>
+            ) : apps.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2 italic">No applications yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {apps.map((app) => (
+                  <div key={app.id} className="bg-white border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:shadow transition-shadow">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">{app.candidate_name}</p>
+                      <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
+                      {app.upload_date && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Applied: {new Date(app.upload_date).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+                      {app.cv_url && (
+                        <a
+                          href={app.cv_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium border border-primary/20 bg-primary/5 rounded-lg px-2.5 py-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span className="max-w-[150px] truncate">{app.cv_filename}</span>
+                        </a>
+                      )}
+                      
+                      <div className="shrink-0">
+                        {app.match_score !== undefined && app.match_score !== null ? (
+                          <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${
+                            app.match_score >= 80 ? "bg-green-50 text-green-700 border-green-200" :
+                            app.match_score >= 60 ? "bg-orange-50 text-orange-700 border-orange-200" :
+                            "bg-slate-50 text-slate-600 border-slate-200"
+                          }`}>
+                            Match Score: {app.match_score}%
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full border bg-slate-50 text-slate-400 border-slate-200 italic">
+                            Match Score: Pending
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Dialogs */}
@@ -443,29 +572,6 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
         confirmLabel="Delete Permanently"
         confirmClass="bg-red-600 hover:bg-red-700 text-white"
         onConfirm={handleDelete}
-        onCancel={() => setDialog(null)}
-      />
-      <ConfirmDialog
-        open={dialog === "save"}
-        title="Update this job?"
-        message="Are you sure you want to update this job? All existing rankings will be re-calculated based on the new job details."
-        confirmLabel="Yes, Update Job"
-        confirmClass="bg-primary hover:bg-primary/90 text-white"
-        onConfirm={async () => {
-          setDialog(null);
-          await handleSave({
-            title: editTitle,
-            description: editDescription,
-            skills: editSkills.split(",").map((s) => s.trim()).filter(Boolean),
-            responsibilities: editResponsibilities.split("\n").map((r) => r.trim()).filter(Boolean),
-            benefits: editBenefits.split("\n").map((b) => b.trim()).filter(Boolean),
-            location: editLocation,
-            salary: editSalary,
-            type: editType,
-            arrangement: editArrangement,
-            level: editLevel,
-          });
-        }}
         onCancel={() => setDialog(null)}
       />
     </>

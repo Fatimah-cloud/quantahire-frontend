@@ -162,7 +162,7 @@ export default function RecruiterAuth() {
       }
       const user = res.data.user;
       if (user.role !== 'recruiter') {
-        setWarning("denied");
+        setWarning("no_access");
         return;
       }
       if (!user.is_active) {
@@ -381,6 +381,7 @@ export default function RecruiterAuth() {
                       onChange={(e) => {
                         setEmail(e.target.value);
                         if (errors.email) setErrors({ ...errors, email: null });
+                        if (warning === "no_access") setWarning(null);
                       }}
                       required
                     />
@@ -392,7 +393,12 @@ export default function RecruiterAuth() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Password</Label>
+                      <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline transition-colors">
+                        Forgot Password?
+                      </Link>
+                    </div>
                     <div className="relative">
                       <Input
                         id="password"
@@ -403,6 +409,7 @@ export default function RecruiterAuth() {
                         onChange={(e) => {
                           setPassword(e.target.value);
                           if (errors.password) setErrors({ ...errors, password: null });
+                          if (warning === "no_access") setWarning(null);
                         }}
                         required
                       />
@@ -508,9 +515,9 @@ export default function RecruiterAuth() {
 
                   {/* Inline warning/status messages (login tab only) */}
                   {warning === "no_access" && (
-                    <div className="flex items-start gap-2.5 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded-xl px-4 py-3 text-sm">
-                      <Clock className="w-4 h-4 mt-0.5 shrink-0 text-yellow-600" />
-                      <span>No account found for this email. Please register first or contact your admin.</span>
+                    <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm animate-shake">
+                      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+                      <span>Invalid email or password. Please try again.</span>
                     </div>
                   )}
                   {warning === "pending" && (

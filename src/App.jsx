@@ -31,6 +31,9 @@ import CandidateProfilePage from './pages/CandidateProfilePage';
 import AdminProfile from './pages/AdminProfile';
 import AdminAllJobs from './pages/AdminAllJobs';
 import AdminManagement from './pages/AdminManagement';
+import JobRankingPage from './pages/recruiter/JobRankingPage';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -80,6 +83,9 @@ const AuthenticatedApp = () => {
       <Route path="/jobs-reference" element={<JobsReference />} />
       <Route path="/portal" element={<Portal />} />
       <Route path="/rank-candidates" element={<RankCandidates />} />
+      <Route path="/recruiter/job/:jobId/rank" element={<JobRankingPage />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/recruiter-profile" element={<RecruiterProfilePage />} />
       <Route path="/candidate-profile-page" element={<CandidateProfilePage />} />
       <Route path="/admin-profile" element={<AdminProfile />} />

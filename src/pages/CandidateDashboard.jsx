@@ -34,15 +34,73 @@ export default function CandidateDashboard() {
   const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(true);
-  const [alerts, setAlerts] = useState([]); // { id, job_title, status }
+  const [alerts, setAlerts] = useState([]); // backend notifications
   const [showNotifications, setShowNotifications] = useState(false);
   const [invites, setInvites] = useState([]);
   const [emailVerified, setEmailVerified] = useState(false);
-  const prevStatusesRef = useRef({});
   const bellRef = useRef(null);
 
-  // Dismiss an alert
-  const dismissAlert = (id) => setAlerts((prev) => prev.filter((a) => a.id !== id));
+  const fetchNotifications = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/notifications", {
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAlerts(data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch notifications:", e);
+    }
+  };
+
+  const markAsRead = async (notifId) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/notifications/${notifId}/read`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+        }
+      });
+      if (response.ok) {
+        setAlerts((prev) =>
+          prev.map((a) => (a.id === notifId ? { ...a, read: true } : a))
+        );
+      }
+    } catch (e) {
+      console.error("Failed to mark notification as read:", e);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const unreadAlerts = alerts.filter((a) => !a.read);
+      await Promise.all(
+        unreadAlerts.map(async (a) => {
+          await fetch(`http://127.0.0.1:8000/api/notifications/${a.id}/read`, {
+            method: "PUT",
+            headers: {
+              "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+            }
+          });
+        })
+      );
+      setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
+    } catch (e) {
+      console.error("Failed to mark all notifications as read:", e);
+    }
+  };
+
+  const deleteNotification = async (notifId) => {
+    try {
+      await quantaClient.entities.Notification.delete(notifId);
+      setAlerts((prev) => prev.filter((a) => a.id !== notifId));
+    } catch (e) {
+      console.error("Failed to delete notification:", e);
+    }
+  };
 
   // Upsert candidate record
   const upsertCandidate = async (me, apps) => {
@@ -65,24 +123,6 @@ export default function CandidateDashboard() {
     }
   };
 
-  // Check for new status changes and create alerts
-  const checkForAlerts = (apps) => {
-    const newAlerts = [];
-    apps.forEach((app) => {
-      const prev = prevStatusesRef.current[app.id];
-      const curr = app.status;
-      if (prev !== undefined && prev !== curr) {
-        if (curr === "shortlisted" || curr === "rejected") {
-          newAlerts.push({ id: app.id, job_title: app.job_title, company: app.company, status: curr });
-        }
-      }
-      prevStatusesRef.current[app.id] = curr;
-    });
-    if (newAlerts.length > 0) {
-      setAlerts((prev) => [...prev, ...newAlerts]);
-    }
-  };
-
   useEffect(() => {
     const init = async () => {
       const candidateEmail = (localStorage.getItem("candidateEmail") || "").trim().toLowerCase();
@@ -94,19 +134,33 @@ export default function CandidateDashboard() {
       }
       setEmailVerified(true);
 
-      // My Applications: fetch from QuantaHire
+      // My Applications, interview slots, and candidate profile: fetch from QuantaHire
       const [apps, interviewSlots, candidates] = await Promise.all([
         quantaClient.entities.Application.filter({ candidate_email: candidateEmail }, "-created_date"),
         quantaClient.entities.InterviewSlot.filter({ candidate_email: candidateEmail }, "-created_date"),
-        quantaClient.entities.Candidate.filter({ email: candidateEmail }),
+        quantaClient.entities.Candidate.filter({ email: candidateEmail })
       ]);
       setInvites(interviewSlots);
+
+      // Fetch custom notifications
+      let notificationsData = [];
+      try {
+        const notifResponse = await fetch("http://127.0.0.1:8000/api/notifications", {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+          }
+        });
+        if (notifResponse.ok) {
+          notificationsData = await notifResponse.json();
+        }
+      } catch (e) {
+        console.error("Failed to fetch notifications during init:", e);
+      }
+      setAlerts(notificationsData || []);
 
       const fullName = candidates[0]?.full_name || apps[0]?.candidate_name || "";
       setUser({ email: candidateEmail, id: candidateId, full_name: fullName });
 
-      // Initialize prev statuses on first load (no alerts)
-      (apps || []).forEach(a => { prevStatusesRef.current[a.id] = a.status; });
       setApplications(apps || []);
 
       const accepted = (apps || []).filter(a => a.status === "shortlisted" || a.status === "accepted").length;
@@ -137,18 +191,18 @@ export default function CandidateDashboard() {
       if (event.type === "update" && event.data?.candidate_email === user.email) {
         setApplications((prev) => {
           const updated = prev.map(a => a.id === event.id ? event.data : a);
-          checkForAlerts(updated);
           setCandidate({ email: user.email, total_applications: updated.length, accepted_count: updated.filter(a => a.status === "shortlisted").length, rejected_count: updated.filter(a => a.status === "rejected").length });
           return updated;
         });
+        fetchNotifications();
       }
       if (event.type === "create" && event.data?.candidate_email === user.email) {
         setApplications((prev) => {
           const updated = [event.data, ...prev];
-          prevStatusesRef.current[event.id] = event.data.status;
           setCandidate({ email: user.email, total_applications: updated.length, accepted_count: updated.filter(a => a.status === "shortlisted").length, rejected_count: updated.filter(a => a.status === "rejected").length });
           return updated;
         });
+        fetchNotifications();
       }
     });
     return () => unsubscribe();
@@ -177,9 +231,9 @@ export default function CandidateDashboard() {
               className="relative p-1.5 rounded-lg hover:bg-accent transition-colors"
             >
               <Bell className="w-5 h-5 text-primary" />
-              {alerts.length > 0 && (
+              {alerts.filter((a) => !a.read).length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {alerts.length}
+                  {alerts.filter((a) => !a.read).length}
                 </span>
               )}
             </button>
@@ -189,9 +243,9 @@ export default function CandidateDashboard() {
               <div className="absolute right-0 top-10 w-80 bg-white border border-border rounded-2xl shadow-xl z-50 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                   <p className="font-semibold text-sm text-foreground">Notifications</p>
-                  {alerts.length > 0 && (
-                    <button onClick={() => setAlerts([])} className="text-xs text-muted-foreground hover:text-foreground">
-                      Clear all
+                  {alerts.filter((a) => !a.read).length > 0 && (
+                    <button onClick={markAllAsRead} className="text-xs text-muted-foreground hover:text-foreground">
+                      Mark all as read
                     </button>
                   )}
                 </div>
@@ -200,7 +254,13 @@ export default function CandidateDashboard() {
                 ) : (
                   <div className="max-h-72 overflow-y-auto divide-y divide-border">
                     {alerts.map((alert) => (
-                      <div key={alert.id + alert.status} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                      <div
+                        key={alert.id}
+                        onClick={() => !alert.read && markAsRead(alert.id)}
+                        className={`flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer ${
+                          !alert.read ? "bg-primary/5 font-medium" : ""
+                        }`}
+                      >
                         {alert.status === "shortlisted" ? (
                           <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
                         ) : (
@@ -211,11 +271,26 @@ export default function CandidateDashboard() {
                             {alert.status === "shortlisted" ? "🎉 Application Accepted!" : "Application Update"}
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                            <strong>{alert.job_title}</strong> at <strong>{alert.company}</strong> —{" "}
-                            {alert.status === "shortlisted" ? "you've been shortlisted!" : "not selected this time."}
+                            {alert.message || (
+                              <>
+                                <strong>{alert.job_title}</strong> at <strong>{alert.company_name || alert.company}</strong> —{" "}
+                                {alert.status === "shortlisted" ? "you've been shortlisted!" : "not selected this time."}
+                              </>
+                            )}
                           </p>
+                          {alert.created_date && (
+                            <span className="text-[10px] text-muted-foreground block mt-1">
+                              {new Date(alert.created_date).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          )}
                         </div>
-                        <button onClick={() => dismissAlert(alert.id)} className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteNotification(alert.id);
+                          }}
+                          className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
+                        >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>

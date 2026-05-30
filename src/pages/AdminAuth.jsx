@@ -28,13 +28,13 @@ export default function AdminAuth() {
       setLoading(false);
 
       if (res.data.error) {
-        setError(res.data.error);
+        setError("Invalid email or password. Please try again.");
         return;
       }
 
       const user = res.data.user;
       if (user.role !== "admin") {
-        setError("Access Denied: You do not have administrator privileges.");
+        setError("Invalid email or password. Please try again.");
         await quantaClient.auth.logout();
         return;
       }
@@ -120,7 +120,10 @@ export default function AdminAuth() {
                     placeholder="admin@quantahire.com"
                     className="h-12 rounded-xl border-border pl-11 focus-visible:ring-primary"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError(null);
+                    }}
                   />
                 </div>
               </div>
@@ -128,6 +131,9 @@ export default function AdminAuth() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
+                  <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline transition-colors">
+                    Forgot Password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -138,7 +144,10 @@ export default function AdminAuth() {
                     placeholder="••••••••"
                     className="h-12 rounded-xl border-border pl-11 pr-11 focus-visible:ring-primary"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
                   />
                   <button
                     type="button"

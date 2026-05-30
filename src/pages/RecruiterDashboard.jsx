@@ -262,7 +262,7 @@ export default function RecruiterDashboard() {
                   appCount={getJobAppCount(job.id)}
                   recruiterEmail={user?.email}
                   onJobUpdated={reloadJobs}
-                  onNavigateRank={() => navigate(`/rank-candidates?job_id=${job.id}&job=${encodeURIComponent(job.title)}`)}
+                  onNavigateRank={() => navigate(`/recruiter/job/${job.id}/rank`)}
                 />
               ))}
             </div>
