@@ -113,9 +113,50 @@ export default function CandidateProfilePage() {
     const file = e.target.files[0];
     if (!file) return;
     setCvUploading(true);
-    const { file_url } = await quantaClient.integrations.Core.UploadFile({ file });
-    setForm(f => ({ ...f, cv_url: file_url, cv_filename: file.name, cv_uploaded_at: new Date().toISOString() }));
-    setCvUploading(false);
+    try {
+      const userId = localStorage.getItem("qh_token");
+      const { file_url } = await quantaClient.integrations.Core.UploadFile({ file, user_id: userId });
+      const newCvData = {
+        cv_url: file_url,
+        cv_filename: file.name,
+        cv_uploaded_at: new Date().toISOString()
+      };
+      
+      setForm(f => ({ ...f, ...newCvData }));
+      
+      // Auto-save the uploaded CV metadata directly to candidate profile record immediately
+      if (candidateRecord?.id) {
+        await quantaClient.entities.Candidate.update(candidateRecord.id, {
+          ...form,
+          ...newCvData,
+          years_of_experience: form.years_of_experience !== "" ? form.years_of_experience : undefined
+        });
+        setCandidateRecord(prev => ({ ...prev, ...newCvData }));
+      } else {
+        const email = (localStorage.getItem("candidateEmail") || "").trim().toLowerCase();
+        const candidates = await quantaClient.entities.Candidate.filter({ email });
+        if (candidates && candidates.length > 0) {
+          const matchedCand = candidates[0];
+          await quantaClient.entities.Candidate.update(matchedCand.id, {
+            ...form,
+            ...newCvData,
+            years_of_experience: form.years_of_experience !== "" ? form.years_of_experience : undefined
+          });
+          setCandidateRecord({ ...matchedCand, ...newCvData });
+        } else {
+          const created = await quantaClient.entities.Candidate.create({
+            ...form,
+            ...newCvData,
+            years_of_experience: form.years_of_experience !== "" ? form.years_of_experience : undefined
+          });
+          setCandidateRecord(created);
+        }
+      }
+    } catch (err) {
+      console.error("CV upload and auto-save failed:", err);
+    } finally {
+      setCvUploading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -282,8 +323,8 @@ export default function CandidateProfilePage() {
           ) : (
             <button onClick={() => cvRef.current?.click()} disabled={cvUploading} className="w-full border-2 border-dashed border-border rounded-xl py-8 flex flex-col items-center gap-2 hover:border-primary/40 transition-colors text-muted-foreground hover:text-foreground">
               {cvUploading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <Upload className="w-6 h-6" />}
-              <span className="text-sm font-medium">{cvUploading ? "Uploading..." : "Upload your CV"}</span>
-              <span className="text-xs">PDF, DOC, or DOCX</span>
+              <span className="text-sm font-medium">{cvUploading ? "Uploading..." : "No CV uploaded"}</span>
+              <span className="text-xs">PDF, DOC, or DOCX — Click to upload</span>
             </button>
           )}
           <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleCvUpload} />

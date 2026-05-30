@@ -164,12 +164,22 @@ const auth = {
 
 const integrations = {
   Core: {
-    UploadFile: async ({ file }) => {
+    UploadFile: async ({ file, user_id }) => {
       const formData = new FormData();
       formData.append("file", file);
+      if (user_id) {
+        formData.append("user_id", user_id);
+      }
+      
+      const token = localStorage.getItem("qh_token");
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
       
       const response = await fetch(`${API_BASE_URL}/upload/`, {
         method: "POST",
+        headers,
         body: formData
       });
       

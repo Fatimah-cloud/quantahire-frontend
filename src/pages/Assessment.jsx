@@ -89,12 +89,41 @@ export default function Assessment() {
         me = { email: localEmail, full_name: localName || me?.full_name || "" };
       }
       setUser(me);
+      
       const qs = await quantaClient.entities.PsychQuestion.list("order_index", 50);
-      setQuestions(qs.sort((a, b) => a.order_index - b.order_index));
+      const sortedQuestions = qs.sort((a, b) => a.order_index - b.order_index);
+      setQuestions(sortedQuestions);
+      
+      // Load saved progress from localStorage if it exists
+      const savedAnswers = localStorage.getItem("psych_answers");
+      const savedCurrent = localStorage.getItem("psych_current");
+      if (savedAnswers) {
+        try {
+          setAnswers(JSON.parse(savedAnswers));
+        } catch (_) {}
+      }
+      if (savedCurrent) {
+        const idx = parseInt(savedCurrent, 10);
+        if (!isNaN(idx) && idx >= 0 && (sortedQuestions.length === 0 || idx < sortedQuestions.length)) {
+          setCurrent(idx);
+        }
+      }
+      
       setLoading(false);
     };
     init();
   }, []);
+
+  // Save progress to localStorage
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      localStorage.setItem("psych_answers", JSON.stringify(answers));
+    }
+  }, [answers]);
+
+  useEffect(() => {
+    localStorage.setItem("psych_current", String(current));
+  }, [current]);
 
   const total = questions.length;
   const answered = Object.keys(answers).length;
@@ -103,6 +132,7 @@ export default function Assessment() {
 
   const handleSelect = (value) => {
     const q = questions[current];
+    if (!q) return;
     setAnswers(prev => ({ ...prev, [q.id]: value }));
   };
 
@@ -126,6 +156,11 @@ export default function Assessment() {
       recommended_jobs: jobs,
       recommended_reason: reason,
     });
+    
+    // Clear saved progress on successful submission
+    localStorage.removeItem("psych_answers");
+    localStorage.removeItem("psych_current");
+    
     setResultId(result.id);
     setStep("done");
     setSubmitting(false);
@@ -136,6 +171,22 @@ export default function Assessment() {
       <Loader2 className="w-6 h-6 animate-spin text-primary" />
     </div>
   );
+
+  if (!loading && (!questions || questions.length === 0)) {
+    return (
+      <div className="min-h-screen bg-[#F8F7FF] flex items-center justify-center px-4">
+        <div className="bg-white border border-border rounded-3xl p-10 max-w-md w-full text-center space-y-5 shadow-sm">
+          <h2 className="text-2xl font-bold text-foreground">No Questions Found</h2>
+          <p className="text-muted-foreground text-sm">
+            We couldn't retrieve the psychometric questions. Please try again or contact support.
+          </p>
+          <Button variant="outline" className="w-full rounded-xl" onClick={() => navigate("/candidate-dashboard")}>
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // DONE
   if (step === "done") return (
@@ -198,6 +249,15 @@ export default function Assessment() {
   // TEST
   const q = questions[current];
   const isLast = current === total - 1;
+
+  if (!q) {
+    return (
+      <div className="min-h-screen bg-[#F8F7FF] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F7FF]">
       <nav className="bg-white border-b border-border px-6 md:px-10 py-3 flex items-center justify-between sticky top-0 z-10">
