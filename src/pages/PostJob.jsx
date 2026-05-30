@@ -86,6 +86,15 @@ export default function PostJob() {
     if (!recruiterEmail) { navigate("/recruiter-auth"); return; }
 
     setSubmitting(true);
+    let recruiterId = null;
+    try {
+      const me = await quantaClient.auth.me();
+      recruiterId = me.id;
+    } catch (err) {
+      console.error("Failed to fetch recruiter info:", err);
+      recruiterId = localStorage.getItem("recruiterId");
+    }
+
     await quantaClient.entities.Job.create({
       title,
       description,
@@ -98,6 +107,8 @@ export default function PostJob() {
       benefits,
       responsibilities,
       recruiter_email: recruiterEmail,
+      recruiter_id: recruiterId,
+      created_by: recruiterId,
       company: recruiterCompany,
       status,
     });

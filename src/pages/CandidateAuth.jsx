@@ -105,6 +105,7 @@ export default function CandidateAuth() {
         setLoading(false);
         return;
       }
+      setLoading(false);
       setSuccess("Account created successfully! Please login.");
       setForm({ fullName: "", email: "", password: "", confirm: "" });
       setTimeout(() => {

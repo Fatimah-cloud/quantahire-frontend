@@ -171,18 +171,6 @@ export default function AdminDashboard() {
           <Button variant="outline" className="rounded-xl gap-2 h-11 px-5" onClick={() => navigate("/jobs-reference")}>
             <Briefcase className="w-4 h-4" />Jobs Reference
           </Button>
-
-          <Button className="rounded-xl gap-2 h-11 px-5 bg-primary hover:bg-primary/90" onClick={() => navigate("/admin-all-jobs")}>
-            <Briefcase className="w-4 h-4" />All Jobs & CVs
-          </Button>
-
-          <Button variant="outline" className="rounded-xl gap-2 h-11 px-5 animate-pulse border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100" onClick={() => navigate("/admin-management")}>
-            <Shield className="w-4 h-4" />Manage Admins
-          </Button>
-
-          <Button variant="outline" className="rounded-xl gap-2 h-11 px-5" onClick={() => navigate("/psych-admin")}>
-            <TrendingUp className="w-4 h-4" />Psychometric Assessment
-          </Button>
         </div>
 
         {/* All Recruiters Table */}
@@ -278,78 +266,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Recent Applications */}
-        <div className="bg-white border border-border rounded-2xl p-6 space-y-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              <div>
-                <h2 className="font-semibold text-foreground">Recent Applications</h2>
-                <p className="text-sm text-muted-foreground">Latest CV submissions across all jobs</p>
-              </div>
-            </div>
-            <span className="bg-muted text-foreground text-sm font-semibold px-3 py-1 rounded-lg">{applications.length} total</span>
-          </div>
 
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-          ) : applications.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-6">No applications yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                    {["Candidate", "Job", "Match Score", "Status", "CV", "Action"].map((h) => (
-                      <th key={h} className="pb-3 pr-6 font-medium whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {applications.slice(0, 20).map((app) => (
-                    <tr key={app.id}>
-                      <td className="py-3 pr-6 whitespace-nowrap">
-                        <p className="font-medium text-foreground">{app.candidate_name || "Unknown"}</p>
-                        <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
-                      </td>
-                      <td className="py-3 pr-6 whitespace-nowrap text-muted-foreground">{app.job_title || "—"}</td>
-                      <td className="py-3 pr-6 whitespace-nowrap">
-                        {app.match_score ? (
-                          <span className={`font-bold text-base ${app.match_score >= 80 ? "text-green-600" : app.match_score >= 60 ? "text-orange-500" : "text-muted-foreground"}`}>
-                            {app.match_score}%
-                          </span>
-                        ) : <span className="text-muted-foreground text-xs">Pending</span>}
-                      </td>
-                      <td className="py-3 pr-6 whitespace-nowrap">
-                        <Badge className={
-                          app.status === "shortlisted" ? "bg-blue-50 text-blue-600 border-blue-200" :
-                          app.status === "rejected" ? "bg-red-50 text-red-500 border-red-200" :
-                          app.status === "processed" ? "bg-green-50 text-green-600 border-green-200" :
-                          app.status === "pending" ? "bg-orange-50 text-orange-500 border-orange-200" :
-                          "bg-muted text-muted-foreground"
-                        }>
-                          {app.status === "processed" ? "CV Analyzed" : app.status === "shortlisted" ? "Shortlisted" : app.status === "rejected" ? "Rejected" : app.status || "Pending"}
-                        </Badge>
-                      </td>
-                      <td className="py-3 pr-6 whitespace-nowrap">
-                        {app.cv_url ? (
-                          <a href={app.cv_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline text-xs">
-                            <FileText className="w-3.5 h-3.5" /> View CV
-                          </a>
-                        ) : <span className="text-muted-foreground text-xs">—</span>}
-                      </td>
-                      <td className="py-3">
-                        <Button size="sm" variant="outline" className="rounded-lg text-xs h-7 px-3" onClick={() => navigate(`/view-candidates?job_id=${app.job_id}&job=${encodeURIComponent(app.job_title || "")}&from=admin`)}>
-                          View Job
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

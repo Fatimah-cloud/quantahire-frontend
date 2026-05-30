@@ -50,7 +50,8 @@ export default function RecruiterDashboard() {
         }
         
         // My Jobs: fetch from QuantaHire
-        const jobsData = await quantaClient.entities.Job.filter({ recruiter_email: recruiterEmail }, "-created_date");
+        const me = await quantaClient.auth.me();
+        const jobsData = await quantaClient.entities.Job.filter({ recruiter_id: me.id }, "-created_date");
         const appsData = await quantaClient.entities.Application.list();
         
         // Filter applications for recruiter's jobs
@@ -90,13 +91,17 @@ export default function RecruiterDashboard() {
   }, [user, jobs]);
 
   const reloadJobs = async () => {
-    const recruiterEmail = localStorage.getItem("recruiterEmail");
-    const jobsData = await quantaClient.entities.Job.filter({ recruiter_email: recruiterEmail }, "-created_date");
-    const appsData = await quantaClient.entities.Application.list();
-    const recruiterJobIds = new Set((jobsData || []).map(j => j.id));
-    const recruiterApps = (appsData || []).filter(a => recruiterJobIds.has(a.job_id));
-    setJobs(jobsData || []);
-    setApplications(recruiterApps || []);
+    try {
+      const me = await quantaClient.auth.me();
+      const jobsData = await quantaClient.entities.Job.filter({ recruiter_id: me.id }, "-created_date");
+      const appsData = await quantaClient.entities.Application.list();
+      const recruiterJobIds = new Set((jobsData || []).map(j => j.id));
+      const recruiterApps = (appsData || []).filter(a => recruiterJobIds.has(a.job_id));
+      setJobs(jobsData || []);
+      setApplications(recruiterApps || []);
+    } catch (err) {
+      console.error("Failed to reload jobs:", err);
+    }
   };
 
   const filteredJobs = jobs.filter((job) => {
