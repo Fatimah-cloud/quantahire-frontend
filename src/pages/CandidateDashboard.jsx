@@ -38,6 +38,8 @@ export default function CandidateDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [invites, setInvites] = useState([]);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [hasTakenPsychTest, setHasTakenPsychTest] = useState(false);
+  const [psychTestResultId, setPsychTestResultId] = useState(null);
   const bellRef = useRef(null);
 
   const fetchNotifications = async () => {
@@ -166,6 +168,21 @@ export default function CandidateDashboard() {
       const accepted = (apps || []).filter(a => a.status === "shortlisted" || a.status === "accepted").length;
       const rejected = (apps || []).filter(a => a.status === "rejected").length;
       setCandidate({ email: candidateEmail, full_name: fullName, total_applications: (apps || []).length, accepted_count: accepted, rejected_count: rejected });
+
+      // Check if candidate took personality test
+      try {
+        const psychResults = await quantaClient.entities.AssessmentResult.filter({ candidate_email: candidateEmail });
+        if (psychResults && psychResults.length > 0) {
+          psychResults.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+          setHasTakenPsychTest(true);
+          setPsychTestResultId(psychResults[0].id);
+        } else {
+          setHasTakenPsychTest(false);
+          setPsychTestResultId(null);
+        }
+      } catch (e) {
+        console.error("Failed to fetch assessment results:", e);
+      }
 
       setLoading(false);
       setChecking(false);
@@ -335,7 +352,16 @@ export default function CandidateDashboard() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {QUICK_ACTIONS.map(({ icon: Icon, label, description, href }) => (
+          {[
+            {
+              icon: ClipboardList,
+              label: hasTakenPsychTest ? "View Results" : "Take Personality Test",
+              description: hasTakenPsychTest ? "Review your personality profile" : "Complete your psychometric test",
+              href: hasTakenPsychTest ? `/candidate/psych-results?id=${psychTestResultId}` : "/candidate/psych-test"
+            },
+            { icon: Briefcase, label: "Browse Jobs", description: "Find jobs and apply with your CV", href: "/browse-jobs" },
+            { icon: UserCircle, label: "My Profile", description: "Update your profile and CV", href: "/candidate-profile-page" },
+          ].map(({ icon: Icon, label, description, href }) => (
             <div
               key={label}
               onClick={() => href && navigate(href)}
@@ -410,9 +436,20 @@ export default function CandidateDashboard() {
                             {app.skills.length > 4 && <span className="text-xs text-muted-foreground">+{app.skills.length - 4} more</span>}
                           </div>
                         )}
+                        {(app.status === "shortlisted" || app.status === "accepted" || app.status === "rejected") && app.feedback && (
+                          <div className="mt-3 text-xs bg-slate-50 border border-slate-100 rounded-xl p-3 text-muted-foreground leading-relaxed">
+                            <span className="font-bold text-foreground">Feedback:</span> {app.feedback}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={() => navigate(`/candidate/job/${app.job_id}`)}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-accent transition-colors"
+                      >
+                        View Job
+                      </button>
                       {app.cv_url && (
                         <a href={app.cv_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-accent transition-colors">
                           View CV

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Sparkles, Trash2, XCircle, RefreshCw, Clock, MapPin, Users, ChevronDown, ChevronUp, DollarSign, Pencil, Check, X, FileText, Loader2 } from "lucide-react";
+import { Sparkles, Trash2, XCircle, RefreshCw, Clock, MapPin, Users, ChevronDown, ChevronUp, DollarSign, Pencil, Check, X, FileText, Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { quantaClient } from "@/api/quantaClient";
+import CandidateProfileModal from "./CandidateProfileModal";
 
 const STATUS_STYLES = {
   open:     "bg-green-50 text-green-600 border border-green-200",
@@ -38,6 +39,7 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
   const [showApps, setShowApps] = useState(false);
   const [apps, setApps] = useState([]);
   const [loadingApps, setLoadingApps] = useState(false);
+  const [selectedProfileCandidate, setSelectedProfileCandidate] = useState(null);
 
   const fetchApplications = async () => {
     setLoadingApps(true);
@@ -500,8 +502,10 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
                 {apps.map((app) => (
                   <div key={app.id} className="bg-white border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:shadow transition-shadow">
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">{app.candidate_name}</p>
-                      <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
+                      <p className="text-sm font-semibold text-foreground">{app.candidate_name || app.candidate_email}</p>
+                      {app.candidate_name && app.candidate_name !== app.candidate_email && (
+                        <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
+                      )}
                       {app.upload_date && (
                         <p className="text-[10px] text-muted-foreground">
                           Applied: {new Date(app.upload_date).toLocaleDateString()}
@@ -521,6 +525,14 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
                           <span className="max-w-[150px] truncate">{app.cv_filename}</span>
                         </a>
                       )}
+                      
+                      <button
+                        onClick={() => setSelectedProfileCandidate(app)}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:bg-primary/5 font-medium border border-primary/20 rounded-lg px-2.5 py-1.5 transition-colors"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        View Profile
+                      </button>
                       
                       <div className="shrink-0">
                         {app.match_score !== undefined && app.match_score !== null ? (
@@ -574,6 +586,15 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
         onConfirm={handleDelete}
         onCancel={() => setDialog(null)}
       />
+
+      {selectedProfileCandidate && (
+        <CandidateProfileModal
+          candidateEmail={selectedProfileCandidate.candidate_email}
+          candidateName={selectedProfileCandidate.candidate_name}
+          jobId={job.id}
+          onClose={() => setSelectedProfileCandidate(null)}
+        />
+      )}
     </>
   );
 }

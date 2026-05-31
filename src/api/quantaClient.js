@@ -345,6 +345,18 @@ const functions = {
   }
 };
 
+const psych = {
+  getQuestions: () => apiFetch("/psych/questions"),
+  submitAnswers: (answers) => apiFetch("/psych/submit", {
+    method: "POST",
+    body: JSON.stringify({ answers })
+  }),
+  getResults: () => apiFetch("/psych/results"),
+  seedQuestions: () => apiFetch("/psych/seed", {
+    method: "POST"
+  })
+};
+
 export const quantaClient = {
   entities,
   asServiceRole: {
@@ -352,7 +364,8 @@ export const quantaClient = {
   },
   auth,
   functions,
-  integrations
+  integrations,
+  psych
 };
 
 export default quantaClient;

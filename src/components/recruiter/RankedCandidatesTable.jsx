@@ -95,8 +95,10 @@ export default function RankedCandidatesTable({ candidates, onReprocess, jobId, 
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="font-semibold text-foreground">{app.candidate_name || "Unknown"}</p>
-                          <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
+                          <p className="font-semibold text-foreground">{app.candidate_name || app.candidate_email || "Unknown"}</p>
+                          {app.candidate_name && app.candidate_name !== app.candidate_email && (
+                            <p className="text-xs text-muted-foreground">{app.candidate_email}</p>
+                          )}
                         </div>
                       </td>
                       {showScores && (
@@ -166,6 +168,7 @@ export default function RankedCandidatesTable({ candidates, onReprocess, jobId, 
       <CandidateProfileModal
         candidateEmail={profileModal.email}
         candidateName={profileModal.name}
+        jobId={jobId}
         onClose={() => setProfileModal(null)}
       />
     )}

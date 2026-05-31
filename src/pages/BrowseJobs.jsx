@@ -20,6 +20,8 @@ export default function BrowseJobs() {
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
   const [error, setError] = useState(null);
+  const [recruiterMap, setRecruiterMap] = useState({});
+  const [selectedRecruiter, setSelectedRecruiter] = useState(null);
 
   // Apply modal state
   const [applyJob, setApplyJob] = useState(null);
@@ -39,12 +41,23 @@ export default function BrowseJobs() {
         const user = candidateEmail ? { email: candidateEmail, id: candidateId, full_name: "" } : null;
         setCurrentUser(user);
 
-        // Fetch all jobs and filter in-memory to allow open or reopened statuses case-insensitively
-        const allJobs = await quantaClient.entities.Job.list();
+        // Fetch all jobs and recruiters
+        const [allJobs, recruitersData] = await Promise.all([
+          quantaClient.entities.Job.list(),
+          quantaClient.entities.RecruiterProfile.list()
+        ]);
         const openJobs = (allJobs || []).filter(
           (j) => (j.status || "").toLowerCase() === "open" || (j.status || "").toLowerCase() === "reopened"
         );
         setJobs(openJobs || []);
+
+        const recMap = {};
+        (recruitersData || []).forEach(r => {
+          if (r.email) {
+            recMap[r.email.trim().toLowerCase()] = r;
+          }
+        });
+        setRecruiterMap(recMap);
 
         // Check already applied
         if (candidateEmail) {
@@ -227,6 +240,38 @@ export default function BrowseJobs() {
                           )}
                         </div>
                       </div>
+
+                      {/* Recruiter Section */}
+                      {(() => {
+                        const recEmail = (job.recruiter_email || "").trim().toLowerCase();
+                        const recruiter = recruiterMap[recEmail];
+                        if (!recruiter) return null;
+                        return (
+                          <div 
+                            onClick={() => setSelectedRecruiter(recruiter)}
+                            className="border-t border-border/60 pt-4 flex items-center justify-between gap-4 group cursor-pointer hover:bg-slate-50/50 -mx-5 px-5 -mb-5 pb-5 rounded-b-2xl transition-colors mt-4"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-xl bg-primary/5 text-primary flex items-center justify-center border border-primary/10 shrink-0">
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                  Company: {recruiter.company || job.company}
+                                </p>
+                                {recruiter.company_overview && (
+                                  <p className="text-[11px] text-muted-foreground truncate max-w-sm sm:max-w-md mt-0.5">
+                                    <strong className="font-semibold text-foreground">Company Overview:</strong> {recruiter.company_overview.length > 100 ? `${recruiter.company_overview.slice(0, 100)}...` : recruiter.company_overview}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-xs font-medium text-primary hover:underline shrink-0 group-hover:translate-x-0.5 transition-transform">
+                              View Company Details &rarr;
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -350,6 +395,57 @@ export default function BrowseJobs() {
           </div>
         </>
       )}
+
+      {/* Recruiter Details Modal */}
+      {selectedRecruiter && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setSelectedRecruiter(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5 border border-border animate-in fade-in zoom-in duration-200">
+              <div className="flex items-start justify-between">
+                <h2 className="font-bold text-foreground text-lg">Company Information</h2>
+                <button onClick={() => setSelectedRecruiter(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 hover:bg-muted rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {(selectedRecruiter.company || selectedRecruiter.company_website) && (
+                <div className="space-y-3 bg-slate-50 border border-border/60 rounded-xl p-4 text-sm">
+                  {selectedRecruiter.company && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-muted-foreground w-24">Company:</span>
+                      <span className="text-foreground font-medium">{selectedRecruiter.company}</span>
+                    </div>
+                  )}
+                  {selectedRecruiter.company_website && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-muted-foreground w-24">Website:</span>
+                      <a href={selectedRecruiter.company_website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium truncate">
+                        {selectedRecruiter.company_website}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedRecruiter.company_overview && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Company Overview</h4>
+                  <p className="text-sm text-muted-foreground bg-slate-50/50 border border-border rounded-xl p-3 leading-relaxed italic">
+                    "{selectedRecruiter.company_overview}"
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button onClick={() => setSelectedRecruiter(null)} className="w-full rounded-xl h-10 font-semibold">
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
-}
+}

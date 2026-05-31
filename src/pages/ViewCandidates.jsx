@@ -344,14 +344,16 @@ export default function ViewCandidates() {
                          </div>
                          <div className="flex-1 min-w-0">
                            <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                             <h3 className="font-semibold text-foreground">{a.candidate_name || "Unknown"}</h3>
+                             <h3 className="font-semibold text-foreground">{a.candidate_name || a.candidate_email || "Unknown"}</h3>
                              {ragTriggered && (
                                <Badge className={`text-xs ${STATUS_STYLES[a.status] || "bg-muted text-muted-foreground"}`}>
                                  {a.status === "processed" ? "CV Analyzed" : a.status === "shortlisted" ? "Shortlisted" : a.status === "rejected" ? "Rejected" : "Pending"}
                                </Badge>
                              )}
                            </div>
-                           <p className="text-sm text-muted-foreground mb-2">{a.candidate_email}</p>
+                           {a.candidate_name && a.candidate_name !== a.candidate_email && (
+                              <p className="text-sm text-muted-foreground mb-2">{a.candidate_email}</p>
+                            )}
                            <div className="flex flex-wrap gap-1.5">
                              {(Array.isArray(a.skills) ? a.skills : []).slice(0, 5).map((s) => (
                                <span key={s} className="text-xs bg-accent text-primary px-2.5 py-1 rounded-full">{s}</span>
@@ -467,6 +469,7 @@ export default function ViewCandidates() {
             <CandidateProfileModal
               candidateEmail={profileModal.email}
               candidateName={profileModal.name}
+              jobId={jobId}
               onClose={() => setProfileModal(null)}
             />
           )}

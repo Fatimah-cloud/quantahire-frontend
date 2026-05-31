@@ -81,38 +81,48 @@ export default function Assessment() {
   useEffect(() => {
     const init = async () => {
       let me = null;
-      try { me = await quantaClient.auth.me(); } catch (_) {}
-      // Prefer localStorage candidate session
-      const localEmail = localStorage.getItem("candidateEmail");
-      const localName = localStorage.getItem("candidateName");
-      if (localEmail) {
-        me = { email: localEmail, full_name: localName || me?.full_name || "" };
-      }
-      setUser(me);
+      try {
+        me = await quantaClient.auth.me();
+      } catch (_) {}
       
-      const qs = await quantaClient.entities.PsychQuestion.list("order_index", 50);
-      const sortedQuestions = qs.sort((a, b) => a.order_index - b.order_index);
-      setQuestions(sortedQuestions);
-      
-      // Load saved progress from localStorage if it exists
-      const savedAnswers = localStorage.getItem("psych_answers");
-      const savedCurrent = localStorage.getItem("psych_current");
-      if (savedAnswers) {
-        try {
-          setAnswers(JSON.parse(savedAnswers));
-        } catch (_) {}
+      const candidateEmail = (localStorage.getItem("candidateEmail") || "").trim().toLowerCase();
+      const candidateId = localStorage.getItem("candidateId");
+      if (!candidateEmail || !candidateId || (me && me.role !== "candidate")) {
+        navigate("/candidate-auth");
+        return;
       }
-      if (savedCurrent) {
-        const idx = parseInt(savedCurrent, 10);
-        if (!isNaN(idx) && idx >= 0 && (sortedQuestions.length === 0 || idx < sortedQuestions.length)) {
-          setCurrent(idx);
+      
+      setUser(me || { email: candidateEmail, full_name: localStorage.getItem("candidateName") || "" });
+      
+      try {
+        const qs = await quantaClient.psych.getQuestions();
+        if (qs) {
+          const sortedQuestions = qs.sort((a, b) => a.order_index - b.order_index);
+          setQuestions(sortedQuestions);
+          
+          // Load saved progress from localStorage if it exists
+          const savedAnswers = localStorage.getItem("psych_answers");
+          const savedCurrent = localStorage.getItem("psych_current");
+          if (savedAnswers) {
+            try {
+              setAnswers(JSON.parse(savedAnswers));
+            } catch (_) {}
+          }
+          if (savedCurrent) {
+            const idx = parseInt(savedCurrent, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < sortedQuestions.length) {
+              setCurrent(idx);
+            }
+          }
         }
+      } catch (err) {
+        console.error("Failed to load questions", err);
       }
       
       setLoading(false);
     };
     init();
-  }, []);
+  }, [navigate]);
 
   // Save progress to localStorage
   useEffect(() => {
@@ -139,31 +149,26 @@ export default function Assessment() {
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
-    const scores = calcScores(questions, answers);
-    const { jobs, reason } = matchJobs(scores);
-    const result = await quantaClient.entities.AssessmentResult.create({
-      candidate_email: user?.email || "",
-      candidate_name: user?.full_name || "",
-      job_profile_id: "personality",
-      job_profile_title: "Personality Assessment",
-      score_openness: scores.openness,
-      score_conscientiousness: scores.conscientiousness,
-      score_extraversion: scores.extraversion,
-      score_agreeableness: scores.agreeableness,
-      score_stability: scores.stability,
-      fit_score: 0,
-      answers,
-      recommended_jobs: jobs,
-      recommended_reason: reason,
-    });
     
-    // Clear saved progress on successful submission
-    localStorage.removeItem("psych_answers");
-    localStorage.removeItem("psych_current");
+    const formattedAnswers = Object.entries(answers).map(([qId, val]) => ({
+      question_id: qId,
+      score: val
+    }));
     
-    setResultId(result.id);
-    setStep("done");
-    setSubmitting(false);
+    try {
+      const res = await quantaClient.psych.submitAnswers(formattedAnswers);
+      
+      // Clear saved progress on successful submission
+      localStorage.removeItem("psych_answers");
+      localStorage.removeItem("psych_current");
+      
+      navigate(`/candidate/psych-results?id=${res.id}`);
+    } catch (err) {
+      console.error(err);
+      alert("Submission failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) return (
@@ -198,7 +203,7 @@ export default function Assessment() {
         <h2 className="text-2xl font-bold text-foreground">Assessment Complete!</h2>
         <p className="text-muted-foreground text-sm">Your personality profile and job recommendations are ready.</p>
         <div className="flex flex-col gap-3">
-          <Button className="w-full rounded-xl bg-primary hover:bg-primary/90" onClick={() => navigate(`/psych-results?id=${resultId}`)}>
+          <Button className="w-full rounded-xl bg-primary hover:bg-primary/90" onClick={() => navigate(`/candidate/psych-results?id=${resultId}`)}>
             View My Results
           </Button>
           <Button variant="outline" className="w-full rounded-xl" onClick={() => navigate("/candidate-dashboard")}>

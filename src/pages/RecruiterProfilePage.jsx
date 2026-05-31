@@ -24,9 +24,10 @@ export default function RecruiterProfilePage() {
   const [applications, setApplications] = useState([]);
   const [form, setForm] = useState({
     full_name: "", email: "", phone: "", company: "",
-    job_title: "", bio: "", photo_url: "",
+    company_website: "", company_overview: "", job_title: "", bio: "", photo_url: "",
   });
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [websiteError, setWebsiteError] = useState("");
 
   useEffect(() => {
     const init = async () => {
@@ -45,6 +46,8 @@ export default function RecruiterProfilePage() {
         email: p.email || email,
         phone: p.phone || "",
         company: p.company || "",
+        company_website: p.company_website || "",
+        company_overview: p.company_overview || "",
         job_title: p.job_title || "",
         bio: p.bio || "",
         photo_url: p.photo_url || "",
@@ -70,10 +73,88 @@ export default function RecruiterProfilePage() {
     setPhotoUploading(false);
   };
 
+  const [fullNameError, setFullNameError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+
+  const handleFullNameChange = (val) => {
+    setForm(f => ({ ...f, full_name: val }));
+    if (!val.trim()) {
+      setFullNameError("Full name is required");
+    } else {
+      setFullNameError("");
+    }
+  };
+
+  const handlePhoneChange = (val) => {
+    setForm(f => ({ ...f, phone: val }));
+    if (!val.trim()) {
+      setPhoneError("Phone number is required");
+    } else if (!/^\+?[0-9]+$/.test(val.trim())) {
+      setPhoneError("Phone number must contain only digits");
+    } else {
+      setPhoneError("");
+    }
+  };
+
+  const handleWebsiteChange = (val) => {
+    setForm(f => ({ ...f, company_website: val }));
+    if (val && !/^https?:\/\//i.test(val)) {
+      setWebsiteError("Website must start with http:// or https://");
+    } else {
+      setWebsiteError("");
+    }
+  };
+
   const handleSave = async () => {
+    let hasError = false;
+
+    // Validate Full Name
+    if (!form.full_name?.trim()) {
+      setFullNameError("Full name is required");
+      hasError = true;
+    } else {
+      setFullNameError("");
+    }
+
+    // Validate Phone Number
+    const phoneVal = form.phone?.trim();
+    if (!phoneVal) {
+      setPhoneError("Phone number is required");
+      hasError = true;
+    } else if (!/^\+?[0-9]+$/.test(phoneVal)) {
+      setPhoneError("Phone number must contain only digits");
+      hasError = true;
+    } else {
+      setPhoneError("");
+    }
+
+    // Validate Website
+    const url = form.company_website?.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      setWebsiteError("Website must start with http:// or https://");
+      hasError = true;
+    } else {
+      setWebsiteError("");
+    }
+
+    if (hasError) return;
+
     setSaving(true);
+
+    // Only send the updatable fields to the backend: Full Name, Phone Number, Job Title, Short Bio, Company Website.
+    // Do NOT send Company Name or Email.
+    const payload = {
+      full_name: form.full_name,
+      phone: form.phone,
+      job_title: form.job_title,
+      bio: form.bio,
+      company_website: form.company_website,
+      photo_url: form.photo_url,
+      company_overview: form.company_overview
+    };
+
     if (profile?.id) {
-      await quantaClient.entities.RecruiterProfile.update(profile.id, form);
+      await quantaClient.entities.RecruiterProfile.update(profile.id, payload);
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -147,7 +228,15 @@ export default function RecruiterProfilePage() {
             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Full Name</Label>
-                <Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="John Doe" className="rounded-xl" />
+                <Input 
+                  value={form.full_name} 
+                  onChange={e => handleFullNameChange(e.target.value)} 
+                  placeholder="John Doe" 
+                  className={`rounded-xl ${fullNameError ? "border-red-500 focus-visible:ring-red-500" : ""}`} 
+                />
+                {fullNameError && (
+                  <p className="text-xs text-red-500 mt-1">{fullNameError}</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
@@ -155,11 +244,43 @@ export default function RecruiterProfilePage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Phone Number</Label>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+966 5X XXX XXXX" className="rounded-xl" />
+                <Input 
+                  value={form.phone} 
+                  onChange={e => handlePhoneChange(e.target.value)} 
+                  placeholder="+966 5X XXX XXXX" 
+                  className={`rounded-xl ${phoneError ? "border-red-500 focus-visible:ring-red-500" : ""}`} 
+                />
+                {phoneError && (
+                  <p className="text-xs text-red-500 mt-1">{phoneError}</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Company Name</Label>
-                <Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="Acme Corp" className="rounded-xl" />
+                <Input value={form.company} disabled className="rounded-xl bg-muted/40 cursor-not-allowed" />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Company Website</Label>
+                <Input
+                  type="url"
+                  value={form.company_website}
+                  onChange={e => handleWebsiteChange(e.target.value)}
+                  placeholder="https://example.com"
+                  className={`rounded-xl ${websiteError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                />
+                {websiteError && (
+                  <p className="text-xs text-red-500 mt-1">{websiteError}</p>
+                )}
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Company Overview</Label>
+                <textarea
+                  value={form.company_overview}
+                  onChange={e => setForm(f => ({ ...f, company_overview: e.target.value }))}
+                  placeholder="Describe your company, mission, values, culture, etc."
+                  maxLength={1000}
+                  rows={4}
+                  className="w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Job Title / Position</Label>

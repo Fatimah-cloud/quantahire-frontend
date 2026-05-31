@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Download, Loader2, Search, ChevronDown, ChevronUp, Briefcase } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, Download, Loader2, Search, ChevronDown, ChevronUp, Briefcase, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from "recharts";
@@ -23,7 +23,16 @@ function getTraitColor(score) {
   return "text-red-500";
 }
 
+function getTraitScore(r, trait) {
+  if (!r) return 0;
+  if (trait === "stability") {
+    return r.score_neuroticism !== undefined ? r.score_neuroticism : (r.score_stability || 0);
+  }
+  return r[`score_${trait}`] || 0;
+}
+
 export default function PsychAdmin() {
+  const navigate = useNavigate();
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedResult, setSelectedResult] = useState(null);
@@ -31,11 +40,25 @@ export default function PsychAdmin() {
   const [dateFilter, setDateFilter] = useState("all");
 
   useEffect(() => {
-    quantaClient.entities.AssessmentResult.list("-created_date", 200).then(res => {
-      setResults(res);
-      setLoading(false);
-    });
-  }, []);
+    const checkAdminAndFetch = async () => {
+      try {
+        const me = await quantaClient.auth.me();
+        if (!me || me.role !== "admin") {
+          navigate("/");
+          return;
+        }
+        const data = await quantaClient.psych.getResults();
+        data.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        setResults(data);
+      } catch (err) {
+        console.error("Failed to load results:", err);
+        navigate("/");
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAdminAndFetch();
+  }, [navigate]);
 
   const filtered = useMemo(() => {
     let list = results;
@@ -56,7 +79,7 @@ export default function PsychAdmin() {
     const headers = ["Name", "Email", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Stability", "Recommended Jobs", "Date"];
     const rows = results.map(r => [
       r.candidate_name || "", r.candidate_email,
-      r.score_openness, r.score_conscientiousness, r.score_extraversion, r.score_agreeableness, r.score_stability,
+      getTraitScore(r, "openness"), getTraitScore(r, "conscientiousness"), getTraitScore(r, "extraversion"), getTraitScore(r, "agreeableness"), getTraitScore(r, "stability"),
       (r.recommended_jobs || []).join("; "),
       new Date(r.created_date).toLocaleDateString()
     ]);
@@ -65,7 +88,7 @@ export default function PsychAdmin() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "personality_results.csv"; a.click();
   };
 
-  const radarData = (r) => TRAITS.map(t => ({ trait: TRAIT_LABELS[t].slice(0, 5), score: r[`score_${t}`] || 0 }));
+  const radarData = (r) => TRAITS.map(t => ({ trait: TRAIT_LABELS[t].slice(0, 5), score: getTraitScore(r, t) }));
 
   if (loading) return (
     <div className="min-h-screen bg-[#F8F7FF] flex items-center justify-center">
@@ -117,7 +140,7 @@ export default function PsychAdmin() {
               <div className="bg-white border border-border rounded-2xl p-10 text-center text-muted-foreground text-sm">No assessments found.</div>
             )}
             {filtered.map(r => {
-              const scores = TRAITS.map(t => r[`score_${t}`] || 0);
+              const scores = TRAITS.map(t => getTraitScore(r, t));
               const topTrait = TRAITS[scores.indexOf(Math.max(...scores))];
               const isSelected = selectedResult?.id === r.id;
               return (
@@ -133,7 +156,7 @@ export default function PsychAdmin() {
                       <div className="min-w-0">
                         <p className="font-semibold text-foreground text-sm truncate">{r.candidate_name || r.candidate_email}</p>
                         <p className="text-xs text-muted-foreground truncate">{r.candidate_email} · {new Date(r.created_date).toLocaleDateString()}</p>
-                        <p className="text-xs text-primary mt-0.5 capitalize">Top trait: {TRAIT_LABELS[topTrait]} ({(r[`score_${topTrait}`] || 0).toFixed(1)})</p>
+                        <p className="text-xs text-primary mt-0.5 capitalize">Top trait: {TRAIT_LABELS[topTrait]} ({getTraitScore(r, topTrait).toFixed(1)})</p>
                       </div>
                     </div>
                     {isSelected ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
@@ -145,8 +168,8 @@ export default function PsychAdmin() {
                         {TRAITS.map(t => (
                           <div key={t}>
                             <p className="text-xs text-muted-foreground">{TRAIT_LABELS[t].slice(0, 4)}</p>
-                            <p className={`font-bold text-sm ${getTraitColor(r[`score_${t}`] || 0)}`}>{(r[`score_${t}`] || 0).toFixed(1)}</p>
-                            <p className="text-xs text-muted-foreground">{getTraitLabel(r[`score_${t}`] || 0).replace("Very ", "V.")}</p>
+                            <p className={`font-bold text-sm ${getTraitColor(getTraitScore(r, t))}`}>{getTraitScore(r, t).toFixed(1)}</p>
+                            <p className="text-xs text-muted-foreground">{getTraitLabel(getTraitScore(r, t)).replace("Very ", "V.")}</p>
                           </div>
                         ))}
                       </div>
@@ -185,7 +208,7 @@ export default function PsychAdmin() {
                   {TRAITS.map(t => (
                     <div key={t}>
                       <p className="text-xs text-muted-foreground">{TRAIT_LABELS[t].slice(0, 4)}</p>
-                      <p className={`font-bold ${getTraitColor(selectedResult[`score_${t}`] || 0)}`}>{(selectedResult[`score_${t}`] || 0).toFixed(1)}</p>
+                      <p className={`font-bold ${getTraitColor(getTraitScore(selectedResult, t))}`}>{getTraitScore(selectedResult, t).toFixed(1)}</p>
                     </div>
                   ))}
                 </div>
@@ -203,7 +226,7 @@ export default function PsychAdmin() {
                   </div>
                 )}
                 <div className="mt-4">
-                  <Link to={`/psych-results?id=${selectedResult.id}`} target="_blank"
+                  <Link to={`/candidate/psych-results?id=${selectedResult.id}`} target="_blank"
                     className="text-xs text-primary hover:underline">
                     View full profile →
                   </Link>

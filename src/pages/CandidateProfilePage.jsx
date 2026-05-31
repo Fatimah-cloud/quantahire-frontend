@@ -65,6 +65,7 @@ export default function CandidateProfilePage() {
   const photoRef = useRef(null);
   const cvRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -82,40 +83,92 @@ export default function CandidateProfilePage() {
     photo_url: "",
   });
 
+  const promiseTimeout = (promise, ms) => {
+    let timeout = new Promise((resolve, reject) => {
+      let id = setTimeout(() => {
+        clearTimeout(id);
+        reject(new Error("Request timed out. Please try again."));
+      }, ms);
+    });
+    return Promise.race([promise, timeout]);
+  };
+
   useEffect(() => {
     const init = async () => {
       const email = (localStorage.getItem("candidateEmail") || "").trim().toLowerCase();
       const id = localStorage.getItem("candidateId");
       if (!email || !id) { navigate("/candidate-auth"); return; }
 
-      const [candidates, apps, assessments] = await Promise.all([
-        quantaClient.entities.Candidate.filter({ email }),
-        quantaClient.entities.Application.filter({ candidate_email: email }, "-created_date"),
-        quantaClient.entities.AssessmentResult.filter({ candidate_email: email }, "-created_date", 1),
-      ]);
-      if (assessments?.length > 0) setAssessmentResult(assessments[0]);
+      setLoading(true);
+      setError(null);
+      try {
+        const [candidates, apps, assessments] = await promiseTimeout(
+          Promise.all([
+            quantaClient.entities.Candidate.filter({ email }),
+            quantaClient.entities.Application.filter({ candidate_email: email }, "-created_date"),
+            quantaClient.entities.AssessmentResult.filter({ candidate_email: email }, "-created_date", 1),
+          ]),
+          8000
+        );
 
-      const c = candidates[0] || {};
-      setCandidateRecord(c);
-      setApplications(apps || []);
-      setForm({
-        full_name: c.full_name || "",
-        email,
-        phone: c.phone || "",
-        location: c.location || "",
-        linkedin_url: c.linkedin_url || "",
-        portfolio_url: c.portfolio_url || "",
-        years_of_experience: c.years_of_experience !== undefined ? String(c.years_of_experience) : "",
-        education_level: c.education_level || "",
-        field_of_study: c.field_of_study || "",
-        current_job_title: c.current_job_title || "",
-        skills: c.skills || [],
-        cv_url: c.cv_url || "",
-        cv_filename: c.cv_filename || "",
-        cv_uploaded_at: c.cv_uploaded_at || "",
-        photo_url: c.photo_url || "",
-      });
-      setLoading(false);
+        if (assessments?.length > 0) setAssessmentResult(assessments[0]);
+
+        const c = candidates[0] || {};
+        setCandidateRecord(c);
+        setApplications(apps || []);
+        setForm({
+          full_name: c.full_name || "",
+          email,
+          phone: c.phone || "",
+          location: c.location || "",
+          linkedin_url: c.linkedin_url || "",
+          portfolio_url: c.portfolio_url || "",
+          years_of_experience: c.years_of_experience !== undefined ? String(c.years_of_experience) : "",
+          education_level: c.education_level || "",
+          field_of_study: c.field_of_study || "",
+          current_job_title: c.current_job_title || "",
+          skills: c.skills || [],
+          cv_url: c.cv_url || "",
+          cv_filename: c.cv_filename || "",
+          cv_uploaded_at: c.cv_uploaded_at || "",
+          photo_url: c.photo_url || "",
+        });
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+        setError("Unable to load profile data from the server. Please try again later.");
+        
+        // Mock fallback data for testing
+        const mockCandidate = {
+          full_name: localStorage.getItem("candidateName") || "Jane Smith",
+          email: email,
+          phone: "+966 5X XXX XXXX",
+          location: "Riyadh, Saudi Arabia",
+          skills: ["React", "JavaScript", "Python"],
+          years_of_experience: "2",
+          education_level: "Bachelor",
+          field_of_study: "Computer Science"
+        };
+        setCandidateRecord(mockCandidate);
+        setForm({
+          full_name: mockCandidate.full_name,
+          email: mockCandidate.email,
+          phone: mockCandidate.phone,
+          location: mockCandidate.location,
+          linkedin_url: "",
+          portfolio_url: "",
+          years_of_experience: mockCandidate.years_of_experience,
+          education_level: mockCandidate.education_level,
+          field_of_study: mockCandidate.field_of_study,
+          current_job_title: "Software Developer",
+          skills: mockCandidate.skills,
+          cv_url: "",
+          cv_filename: "",
+          cv_uploaded_at: "",
+          photo_url: ""
+        });
+      } finally {
+        setLoading(false);
+      }
     };
     init();
   }, [navigate]);
@@ -267,6 +320,12 @@ export default function CandidateProfilePage() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 space-y-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm flex justify-between items-center shadow-sm">
+            <span>⚠️ {error} (Showing fallback profile data)</span>
+            <button onClick={() => setError(null)} className="text-red-700 font-bold hover:text-red-900 transition-colors">×</button>
+          </div>
+        )}
         {/* Page Header */}
         <div>
           <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-1">Candidate Portal</p>
@@ -526,9 +585,6 @@ export default function CandidateProfilePage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-bold ${app.match_score >= 80 ? "text-green-600" : app.match_score >= 60 ? "text-orange-500" : "text-muted-foreground"}`}>
-                      {app.match_score}% Match
-                    </p>
                     <p className="text-xs text-muted-foreground capitalize">{app.status}</p>
                   </div>
                 </div>

@@ -34,6 +34,7 @@ import AdminManagement from './pages/AdminManagement';
 import JobRankingPage from './pages/recruiter/JobRankingPage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import CandidateJobDetail from './pages/CandidateJobDetail';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -70,7 +71,9 @@ const AuthenticatedApp = () => {
       <Route path="/candidate-profile" element={<CandidateProfile />} />
       <Route path="/candidate-auth" element={<CandidateAuth />} />
       <Route path="/candidate-dashboard" element={<CandidateDashboard />} />
+      <Route path="/candidate/dashboard" element={<CandidateDashboard />} />
       <Route path="/assessment" element={<Assessment />} />
+      <Route path="/candidate/psych-test" element={<Assessment />} />
       <Route path="/admin-auth" element={<AdminAuth />} />
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route path="/recruiter-management" element={<RecruiterManagement />} />
@@ -79,11 +82,14 @@ const AuthenticatedApp = () => {
       <Route path="/recruiter-approval-table" element={<RecruiterApprovalTable />} />
       <Route path="/browse-jobs" element={<BrowseJobs />} />
       <Route path="/psych-results" element={<PsychResults />} />
+      <Route path="/candidate/psych-results" element={<PsychResults />} />
       <Route path="/psych-admin" element={<PsychAdmin />} />
+      <Route path="/admin/personality-results" element={<PsychAdmin />} />
       <Route path="/jobs-reference" element={<JobsReference />} />
       <Route path="/portal" element={<Portal />} />
       <Route path="/rank-candidates" element={<RankCandidates />} />
       <Route path="/recruiter/job/:jobId/rank" element={<JobRankingPage />} />
+      <Route path="/candidate/job/:jobId" element={<CandidateJobDetail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/recruiter-profile" element={<RecruiterProfilePage />} />

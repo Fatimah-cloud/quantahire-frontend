@@ -37,6 +37,13 @@ export default function JobRankingPage() {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showSingleFeedbackModal, setShowSingleFeedbackModal] = useState(false);
+  const [selectedCandidateForFeedback, setSelectedCandidateForFeedback] = useState(null);
+  const [singleFeedbackText, setSingleFeedbackText] = useState("");
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [showBulkFeedbackModal, setShowBulkFeedbackModal] = useState(false);
+  const [sendingBulkFeedback, setSendingBulkFeedback] = useState(false);
+  const [loadingStatuses, setLoadingStatuses] = useState({});
 
   const fetchJobAndApplications = async () => {
     try {
@@ -94,43 +101,21 @@ export default function JobRankingPage() {
 
     setRanking(true);
     try {
-      // 1. Call POST /api/match/ to initialize/align matching session in the backend
-      const matchResponse = await fetch("http://127.0.0.1:8000/api/match/", {
+      const matchResponse = await fetch(`http://127.0.0.1:8000/api/match/${jobId}/rank-and-feedback`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
-        },
-        body: JSON.stringify({ job_id: jobId })
+        }
       });
 
       if (!matchResponse.ok) {
-        throw new Error("Failed to start match session on backend");
+        throw new Error("Failed to rank candidates and generate feedback");
       }
-
-      const matchData = await matchResponse.json();
-      if (matchData && matchData.session_id) {
-        setSessionId(matchData.session_id);
-        localStorage.setItem(`session_id_${jobId}`, matchData.session_id);
-      }
-
-      // 2. Process CVs in parallel to calculate and store match_score in applications collection
-      await Promise.all(
-        appsWithCV.map(app =>
-          quantaClient.functions.invoke("processCV", {
-            resume_url: app.cv_url,
-            application_id: app.id,
-            job_id: jobId,
-            job_title: job.title,
-            job_description: job.description,
-            job_skills: job.skills || [],
-          })
-        )
-      );
 
       toast({
         title: "Success",
-        description: "Candidates ranked successfully."
+        description: "Ranking complete. Feedback generated for all candidates."
       });
       
       // Refresh candidates list
@@ -256,38 +241,177 @@ export default function JobRankingPage() {
     setCandidates((prev) =>
       prev.map((c) => (c.id === appId ? { ...c, status: newStatus } : c))
     );
+    setLoadingStatuses((prev) => ({ ...prev, [appId]: newStatus }));
 
     try {
-      await quantaClient.entities.Application.update(appId, { status: newStatus });
+      const response = await fetch(`http://127.0.0.1:8000/api/applications/${appId}/status-with-feedback`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update status and generate feedback");
+      }
+
+      const updatedApp = await response.json();
       
+      // Update UI with the returned status and feedback
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === appId ? { ...c, status: updatedApp.status, feedback: updatedApp.feedback } : c))
+      );
+
       let title = "Status Updated";
-      let description = `Candidate status updated to ${newStatus}.`;
+      let description = `Candidate ${newStatus} and feedback updated`;
       if (newStatus === "shortlisted") {
         title = "Shortlisted";
-        description = "Candidate shortlisted successfully";
+        description = "Candidate shortlisted and feedback updated";
       } else if (newStatus === "rejected") {
         title = "Rejected";
-        description = "Candidate rejected successfully";
+        description = "Candidate rejected and feedback updated";
       } else if (newStatus === "pending") {
         title = "Pending";
-        description = "Candidate status reset successfully";
+        description = "Candidate status reset and feedback updated";
       }
 
       toast({
         title,
         description
       });
-      // Refresh list to pull updated status
-      await fetchJobAndApplications();
     } catch (error) {
       console.error("Failed to update candidate status:", error);
-      // Revert optimistic update on failure
-      await fetchJobAndApplications();
       toast({
         variant: "destructive",
         title: "Error",
         description: "Failed to update candidate status."
       });
+      // Revert optimistic update on failure
+      await fetchJobAndApplications();
+    } finally {
+      setLoadingStatuses((prev) => {
+        const next = { ...prev };
+        delete next[appId];
+        return next;
+      });
+    }
+  };
+
+  const getAIFeedbackTemplate = (status, jobTitle, cand = null) => {
+    const title = jobTitle || "this position";
+    const skillsList = cand?.skills || [];
+    let topSkillsText = "your field";
+    if (skillsList.length > 0) {
+      if (skillsList.length === 1) {
+        topSkillsText = skillsList[0];
+      } else if (skillsList.length === 2) {
+        topSkillsText = `${skillsList[0]} and ${skillsList[1]}`;
+      } else {
+        const first3 = skillsList.slice(0, 3);
+        if (first3.length === 3) {
+          topSkillsText = `${first3[0]}, ${first3[1]}, and ${first3[2]}`;
+        } else {
+          topSkillsText = first3.join(" and ");
+        }
+      }
+    }
+    if (status === "shortlisted") {
+      return `Congratulations! Your application for ${title} has been shortlisted. Your skills in ${topSkillsText} align well with our requirements. Our team will contact you shortly with next steps.`;
+    } else if (status === "rejected") {
+      return `Thank you for your application for ${title}. While your background is impressive, we have decided to move forward with other candidates whose experience more closely matches our needs. We wish you the best in your job search.`;
+    } else {
+      return `Your application for ${title} is currently under review. We will notify you once a decision has been made.`;
+    }
+  };
+
+  const handleOpenFeedbackModal = (cand) => {
+    setSelectedCandidateForFeedback(cand);
+    if (cand.feedback) {
+      setSingleFeedbackText(cand.feedback);
+    } else {
+      const status = cand.status || "pending";
+      const text = getAIFeedbackTemplate(status, job?.title, cand);
+      setSingleFeedbackText(text);
+    }
+    setShowSingleFeedbackModal(true);
+  };
+
+  const handleSendFeedback = async () => {
+    if (!selectedCandidateForFeedback) return;
+    setSendingFeedback(true);
+    try {
+      await quantaClient.entities.Application.update(selectedCandidateForFeedback.id, {
+        feedback: singleFeedbackText
+      });
+      
+      setCandidates(prev =>
+        prev.map(c => c.id === selectedCandidateForFeedback.id ? { ...c, feedback: singleFeedbackText } : c)
+      );
+      
+      toast({
+        title: "Feedback Sent",
+        description: `Feedback sent to ${selectedCandidateForFeedback.candidate_name}`
+      });
+      
+      setShowSingleFeedbackModal(false);
+      setSelectedCandidateForFeedback(null);
+      setSingleFeedbackText("");
+    } catch (err) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Failed to send feedback",
+        description: "Please try again."
+      });
+    } finally {
+      setSendingFeedback(false);
+    }
+  };
+
+  const handleSendFeedbackToAll = async () => {
+    if (filteredAndSortedCandidates.length === 0) {
+      toast({
+        description: "No candidates in this tab."
+      });
+      return;
+    }
+    
+    setSendingBulkFeedback(true);
+    try {
+      const status = statusFilter === "shortlisted" ? "shortlisted" : "rejected";
+        
+      const updatedCandidates = await Promise.all(
+        filteredAndSortedCandidates.map(async (c) => {
+          const text = getAIFeedbackTemplate(status, job?.title, c);
+          await quantaClient.entities.Application.update(c.id, { feedback: text });
+          return { ...c, feedback: text };
+        })
+      );
+      
+      setCandidates(prev =>
+        prev.map(c => {
+          const updated = updatedCandidates.find(uc => uc.id === c.id);
+          return updated ? updated : c;
+        })
+      );
+      
+      toast({
+        title: "Bulk Feedback Sent",
+        description: `Feedback sent to all ${filteredAndSortedCandidates.length} candidates`
+      });
+      
+      setShowBulkFeedbackModal(false);
+    } catch (err) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Failed to send feedback to all",
+        description: "Please try again."
+      });
+    } finally {
+      setSendingBulkFeedback(false);
     }
   };
 
@@ -338,43 +462,44 @@ export default function JobRankingPage() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FC]">
-      {/* Top sticky header */}
-      <div className="bg-white border-b border-border px-6 md:px-10 py-5 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <Link to="/recruiter-dashboard" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-medium">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
-            </Link>
-            <div className="flex flex-wrap items-center gap-3 mt-1">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Back Link */}
+        <div className="flex justify-between items-center">
+          <Link to="/recruiter-dashboard" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors font-medium">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </Link>
+        </div>
+
+        {/* Job Header */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground tracking-tight">{job.title}</h1>
               <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium capitalize ${STATUS_STYLES[jobStatus.toLowerCase()] || STATUS_STYLES.draft}`}>
                 {jobStatus}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
-              {job.location && (
-                <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-primary" />{job.location}</span>
-              )}
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-primary" />{candidates.length} applicant{candidates.length !== 1 ? "s" : ""}</span>
+            <div className="flex flex-wrap gap-4 mt-2 text-gray-600 text-sm">
+              {job.location && <span>📍 {job.location}</span>}
+              <span>👥 {candidates.length} applicant{candidates.length !== 1 ? "s" : ""}</span>
               {job.created_date && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-primary" />
-                  Created: {new Date(job.created_date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                </span>
+                <span>📅 Created: {new Date(job.created_date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</span>
               )}
-              {job.type && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">{job.type}</span>}
-              {job.arrangement && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">{job.arrangement}</span>}
-              {job.level && <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">{job.level}</span>}
-              {job.salary && <span className="flex items-center gap-1 font-semibold text-primary"><DollarSign className="w-3.5 h-3.5" />{job.salary}</span>}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {job.type && <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-semibold uppercase">{job.type}</span>}
+              {job.arrangement && <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-semibold uppercase">{job.arrangement}</span>}
+              {job.level && <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-semibold uppercase">{job.level}</span>}
+              {job.salary && <span className="flex items-center gap-1 font-bold text-primary text-xs bg-primary/10 px-2.5 py-1 rounded"><DollarSign className="w-3 h-3" />{job.salary}</span>}
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 w-full md:w-auto justify-end">
             <Button
               onClick={() => setShowFeedbackModal(true)}
               disabled={ranking || feedbackLoading || candidates.length === 0}
               variant="outline"
-              className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl shadow-sm gap-2 font-medium px-5"
+              className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl shadow-sm gap-2 font-medium px-5 h-10 text-sm"
             >
               <MessageSquare className="w-4 h-4 text-primary" />
               Rank with Feedback
@@ -382,7 +507,7 @@ export default function JobRankingPage() {
             <Button
               onClick={handleRankAll}
               disabled={ranking || candidates.length === 0}
-              className="bg-primary hover:bg-primary/90 text-white rounded-xl shadow-md gap-2 font-medium px-5"
+              className="bg-primary hover:bg-primary/90 text-white rounded-xl shadow-md gap-2 font-medium px-5 h-10 text-sm"
             >
               {ranking ? (
                 <>
@@ -398,99 +523,108 @@ export default function JobRankingPage() {
             </Button>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* Left Column: Job Description and Requirements */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-2xl border border-border p-6 shadow-sm space-y-6">
-              <h2 className="text-base font-bold text-foreground border-b border-border pb-3 flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-primary" />
-                Job Requirements & Specs
-              </h2>
+          {/* Left Column - Job Description */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border space-y-5 h-fit">
+            <h2 className="font-semibold text-lg flex items-center gap-2 border-b pb-3">
+              <Briefcase className="w-4 h-4 text-primary" />
+              Job Requirements & Specs
+            </h2>
 
-              {job.description && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Role Description</h3>
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-line bg-slate-50/60 p-4 rounded-xl border border-slate-100">{job.description}</p>
-                </div>
-              )}
+            {job.description && (
+              <div className="space-y-1.5">
+                <h3 className="font-medium text-sm text-foreground">Role Description</h3>
+                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line bg-slate-50/60 p-4 rounded-xl border border-slate-100">{job.description}</p>
+              </div>
+            )}
 
-              {job.skills && job.skills.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Required Skills</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {job.skills.map((skill, i) => (
-                      <span key={i} className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
+            {job.skills && job.skills.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="font-medium text-sm text-foreground">Required Skills</h3>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {job.skills.map((skill, i) => (
+                    <span key={i} className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium">
+                      {skill}
+                    </span>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {job.responsibilities && job.responsibilities.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Responsibilities</h3>
-                  <ul className="space-y-2">
-                    {job.responsibilities.map((r, i) => (
-                      <li key={i} className="text-sm text-foreground flex items-start gap-2 bg-slate-50/40 p-2.5 rounded-lg border border-slate-100/50">
-                        <span className="text-primary font-bold shrink-0 mt-0.5">•</span>
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            {job.responsibilities && job.responsibilities.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="font-medium text-sm text-foreground">Responsibilities</h3>
+                <ul className="space-y-2 mt-1.5">
+                  {job.responsibilities.map((r, i) => (
+                    <li key={i} className="text-sm text-gray-600 flex items-start gap-2 bg-slate-50/40 p-2.5 rounded-lg border border-slate-100/50">
+                      <span className="text-primary font-bold shrink-0 mt-0.5">•</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-              {job.benefits && job.benefits.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Benefits</h3>
-                  <ul className="space-y-2">
-                    {job.benefits.map((b, i) => (
-                      <li key={i} className="text-sm text-foreground flex items-start gap-2 bg-green-50/30 p-2.5 rounded-lg border border-green-100/50">
-                        <span className="text-green-500 font-bold shrink-0 mt-0.5">✓</span>
-                        <span>{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+            {job.benefits && job.benefits.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="font-medium text-sm text-foreground">Benefits</h3>
+                <ul className="space-y-2 mt-1.5">
+                  {job.benefits.map((b, i) => (
+                    <li key={i} className="text-sm text-gray-600 flex items-start gap-2 bg-green-50/30 p-2.5 rounded-lg border border-green-100/50">
+                      <span className="text-green-500 font-bold shrink-0 mt-0.5">✓</span>
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
-          {/* Right Column: Candidates & Applications */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* Right Column - Candidates */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border space-y-4">
             
-            {/* Search and Filters */}
-            <div className="bg-white rounded-2xl border border-border p-5 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
-              <div className="relative w-full md:max-w-xs">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search candidates..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-11 rounded-xl"
-                />
-              </div>
+            {/* Search Bar */}
+            <div className="relative w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search candidates by name or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11 rounded-xl w-full"
+              />
+            </div>
 
-              <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+            {/* Filter Tabs & Bulk Actions */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 justify-between border-b pb-2">
+              <div className="flex gap-2 overflow-x-auto pb-1 w-full sm:w-auto">
                 {["all", "pending", "shortlisted", "rejected"].map((filter) => (
                   <button
                     key={filter}
                     onClick={() => setStatusFilter(filter)}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold uppercase tracking-wider border transition-all whitespace-nowrap ${
+                    className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap ${
                       statusFilter === filter
-                        ? "bg-primary border-primary text-white shadow-sm"
-                        : "bg-white border-border text-muted-foreground hover:text-foreground hover:bg-slate-50"
+                        ? "border-primary text-primary font-bold"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {filter === "all" ? "All Applicants" : filter}
                   </button>
                 ))}
               </div>
+
+              {(statusFilter === "shortlisted" || statusFilter === "rejected") && filteredAndSortedCandidates.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBulkFeedbackModal(true)}
+                  className="rounded-xl gap-1.5 text-xs border-primary text-primary hover:bg-primary/5 h-9 shrink-0"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> Send Feedback to All {statusFilter === "shortlisted" ? "Shortlisted" : "Rejected"} Candidates
+                </Button>
+              )}
             </div>
 
             {/* Candidates list */}
@@ -513,7 +647,7 @@ export default function JobRankingPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {!ranking && filteredAndSortedCandidates.map((cand, idx) => {
                   const hasScore = cand.match_score !== undefined && cand.match_score !== null;
                   const isShortlisted = cand.status === "shortlisted";
@@ -522,108 +656,138 @@ export default function JobRankingPage() {
                   return (
                     <div
                       key={cand.id}
-                      className={`bg-white border rounded-2xl p-5 shadow-sm hover:shadow transition-all relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      className={`bg-white border rounded-2xl p-4 shadow-sm hover:shadow transition-all relative overflow-hidden space-y-3 ${
                         isShortlisted ? "border-green-200 bg-green-50/10" :
                         isRejected ? "border-red-100 bg-red-50/5" : "border-border"
                       }`}
                     >
-                      {/* Left side: Candidate profile info */}
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className="w-10 h-10 rounded-xl bg-accent text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                          {hasScore ? (
-                            <span className="text-primary-700 font-extrabold">#{idx + 1}</span>
-                          ) : (
-                            <span>{cand.candidate_name[0].toUpperCase()}</span>
-                          )}
+                      {/* Top Row: Candidate profile info & Status Badge */}
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-accent text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                            {hasScore ? (
+                              <span className="text-primary-700 font-extrabold">#{idx + 1}</span>
+                            ) : (
+                              <span>{cand.candidate_name[0].toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-foreground">{cand.candidate_name}</h3>
+                            <p className="text-xs text-muted-foreground font-medium">{cand.candidate_email}</p>
+                            {cand.upload_date && (
+                              <p className="text-[10px] text-gray-500 mt-0.5">
+                                Applied: {new Date(cand.upload_date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                            {cand.candidate_name}
-                            {isShortlisted && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
-                                <Check className="w-2.5 h-2.5" /> Shortlisted
-                              </span>
-                            )}
-                            {isRejected && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">
-                                <X className="w-2.5 h-2.5" /> Rejected
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-muted-foreground font-medium">{cand.candidate_email}</p>
-                          {cand.upload_date && (
-                            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-muted-foreground" />
-                              Applied: {new Date(cand.upload_date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                            </p>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isShortlisted && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
+                              <Check className="w-2.5 h-2.5" /> Shortlisted
+                            </span>
+                          )}
+                          {isRejected && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-full">
+                              <X className="w-2.5 h-2.5" /> Rejected
+                            </span>
+                          )}
+                          {!isShortlisted && !isRejected && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-blue-100 text-blue-700 font-bold px-2.5 py-1 rounded-full">
+                              <Clock className="w-2.5 h-2.5" /> Pending
+                            </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Right side: Resume link & scores */}
-                      <div className="flex flex-wrap md:flex-nowrap items-center gap-4 justify-between md:justify-end">
-                        {cand.cv_url && (
-                          <a
-                            href={cand.cv_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-semibold border border-primary/20 bg-primary/5 rounded-xl px-3 py-2 transition-all hover:bg-primary/10 shrink-0"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="max-w-[150px] truncate">{cand.cv_filename || "View Resume"}</span>
-                          </a>
-                        )}
+                      {/* Bottom Row: Actions, Scores, Toggles, Feedback */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100">
+                        {/* Left portion: CV and Match score */}
+                        <div className="flex items-center gap-3 text-xs">
+                          {cand.cv_url && (
+                            <a
+                              href={cand.cv_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary font-semibold hover:underline flex items-center gap-1"
+                            >
+                              📄 View CV
+                            </a>
+                          )}
 
-                        <div className="shrink-0">
                           {hasScore ? (
-                            <div className={`inline-flex items-center gap-1 text-xs font-extrabold px-3 py-1.5 rounded-xl border ${
-                              cand.match_score >= 80 ? "bg-green-100 text-green-700 border-green-300 shadow-sm shadow-green-100" :
-                              cand.match_score >= 60 ? "bg-orange-100 text-orange-700 border-orange-300 shadow-sm shadow-orange-100" :
-                              "bg-slate-100 text-slate-700 border-slate-300"
-                            }`}>
-                              <Award className="w-3.5 h-3.5" />
-                              Match: {cand.match_score}%
-                            </div>
+                            <span className="font-semibold text-muted-foreground">
+                              Match: <strong className={cand.match_score >= 60 ? "text-green-600" : "text-amber-600"}>{cand.match_score}%</strong>
+                            </span>
                           ) : (
-                            <div className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-xl border bg-slate-50 text-slate-400 border-slate-200 italic">
-                              Match: Pending
-                            </div>
+                            <span className="text-muted-foreground italic">Match: Pending</span>
                           )}
                         </div>
 
-                        {/* Status Toggle Controls */}
-                        <div className="flex items-center gap-1 border border-border/80 bg-slate-50/50 p-1 rounded-xl shrink-0">
-                          <button
-                            onClick={() => handleStatusChange(cand.id, "shortlisted")}
-                            className={`p-1.5 rounded-lg transition-all ${
-                              isShortlisted
-                                ? "bg-green-600 text-white shadow-sm"
-                                : "text-muted-foreground hover:text-green-600 hover:bg-green-50"
-                            }`}
-                            title="Shortlist Candidate"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleStatusChange(cand.id, "rejected")}
-                            className={`p-1.5 rounded-lg transition-all ${
-                              isRejected
-                                ? "bg-red-600 text-white shadow-sm"
-                                : "text-muted-foreground hover:text-red-500 hover:bg-red-50"
-                            }`}
-                            title="Reject Candidate"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                          {(isShortlisted || isRejected) && (
+                        {/* Right portion: Toggles & Send Feedback Button */}
+                        <div className="flex items-center gap-2">
+                          {/* Status Toggle Controls */}
+                          <div className="flex items-center gap-1 border border-border/80 bg-slate-50/50 p-0.5 rounded-lg">
                             <button
-                              onClick={() => handleStatusChange(cand.id, "pending")}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-slate-100 transition-all"
-                              title="Reset status to pending"
+                              onClick={() => handleStatusChange(cand.id, "shortlisted")}
+                              disabled={!!loadingStatuses[cand.id]}
+                              className={`p-1.5 rounded-md transition-all ${
+                                isShortlisted
+                                  ? "bg-green-600 text-white shadow-sm"
+                                  : "text-muted-foreground hover:text-green-600 hover:bg-green-50"
+                              } ${loadingStatuses[cand.id] ? "opacity-70 cursor-not-allowed" : ""}`}
+                              title="Shortlist Candidate"
                             >
-                              <Clock className="w-3.5 h-3.5" />
+                              {loadingStatuses[cand.id] === "shortlisted" ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
                             </button>
-                          )}
+                            <button
+                              onClick={() => handleStatusChange(cand.id, "rejected")}
+                              disabled={!!loadingStatuses[cand.id]}
+                              className={`p-1.5 rounded-md transition-all ${
+                                isRejected
+                                  ? "bg-red-600 text-white shadow-sm"
+                                  : "text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                              } ${loadingStatuses[cand.id] ? "opacity-70 cursor-not-allowed" : ""}`}
+                              title="Reject Candidate"
+                            >
+                              {loadingStatuses[cand.id] === "rejected" ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <X className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            {(isShortlisted || isRejected) && (
+                              <button
+                                onClick={() => handleStatusChange(cand.id, "pending")}
+                                disabled={!!loadingStatuses[cand.id]}
+                                className={`p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-slate-100 transition-all ${loadingStatuses[cand.id] ? "opacity-70 cursor-not-allowed" : ""}`}
+                                title="Reset status to pending"
+                              >
+                                {loadingStatuses[cand.id] === "pending" ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Clock className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Send/Edit Feedback Button */}
+                          <Button
+                            variant={cand.feedback ? "secondary" : "default"}
+                            size="sm"
+                            onClick={() => handleOpenFeedbackModal(cand)}
+                            className="rounded-xl text-xs gap-1 h-8 px-3"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            {cand.feedback ? "Edit Feedback" : "Send Feedback"}
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -686,6 +850,97 @@ export default function JobRankingPage() {
                   <Sparkles className="w-4 h-4" />
                   Apply & Re-rank
                 </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Candidate Feedback Dialog Modal */}
+      <Dialog open={showSingleFeedbackModal} onOpenChange={setShowSingleFeedbackModal}>
+        <DialogContent className="sm:max-w-lg rounded-2xl p-6 bg-white border border-border/60 shadow-xl">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-xl font-bold text-foreground">
+              Send Feedback to {selectedCandidateForFeedback?.candidate_name}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Edit the AI-generated feedback message before sending it to the candidate.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+              Feedback Message
+            </label>
+            <Textarea
+              value={singleFeedbackText}
+              onChange={(e) => setSingleFeedbackText(e.target.value)}
+              className="min-h-[120px] rounded-xl resize-none text-sm p-3.5 focus-visible:ring-primary/20 border-border"
+            />
+          </div>
+          
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSingleFeedbackModal(false);
+                setSelectedCandidateForFeedback(null);
+                setSingleFeedbackText("");
+              }}
+              className="rounded-xl flex-1 font-semibold border-border text-muted-foreground hover:bg-slate-50"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendFeedback}
+              disabled={sendingFeedback || !singleFeedbackText.trim()}
+              className="rounded-xl flex-1 font-semibold bg-primary hover:bg-primary/90 text-white gap-2"
+            >
+              {sendingFeedback ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Send Feedback"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Feedback Dialog Modal */}
+      <Dialog open={showBulkFeedbackModal} onOpenChange={setShowBulkFeedbackModal}>
+        <DialogContent className="sm:max-w-lg rounded-2xl p-6 bg-white border border-border/60 shadow-xl">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-xl font-bold text-foreground">
+              Send Feedback to All {statusFilter === "shortlisted" ? "Shortlisted" : "Rejected"} Candidates?
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              This will send the pre-filled AI-generated {statusFilter === "shortlisted" ? "acceptance" : "rejection"} feedback to all candidates in this tab.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkFeedbackModal(false)}
+              className="rounded-xl flex-1 font-semibold border-border text-muted-foreground hover:bg-slate-50"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendFeedbackToAll}
+              disabled={sendingBulkFeedback}
+              className="rounded-xl flex-1 font-semibold bg-primary hover:bg-primary/90 text-white gap-2"
+            >
+              {sendingBulkFeedback ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Yes, Send to All"
               )}
             </Button>
           </DialogFooter>

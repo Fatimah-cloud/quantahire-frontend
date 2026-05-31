@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, Briefcase, TrendingUp, TrendingDown } from "lucide-react";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { quantaClient } from "@/api/quantaClient";
@@ -52,6 +52,7 @@ function getTraitColor(score) {
 const TRAITS = ["openness", "conscientiousness", "extraversion", "agreeableness", "stability"];
 
 export default function PsychResults() {
+  const navigate = useNavigate();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentUserName, setCurrentUserName] = useState(null);
@@ -60,23 +61,48 @@ export default function PsychResults() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
 
-    const candidateEmail = localStorage.getItem("candidateEmail");
+    const init = async () => {
+      let me = null;
+      try {
+        me = await quantaClient.auth.me();
+      } catch (_) {}
 
-    const fetchAll = async () => {
-      const promises = [];
-      if (id) promises.push(quantaClient.entities.AssessmentResult.filter({ id }));
-      else promises.push(Promise.resolve([]));
-      if (candidateEmail) promises.push(quantaClient.entities.Candidate.filter({ email: candidateEmail }));
-      else promises.push(Promise.resolve([]));
+      const candidateEmail = (localStorage.getItem("candidateEmail") || "").trim().toLowerCase();
+      const candidateId = localStorage.getItem("candidateId");
+      if (!candidateEmail || !candidateId || (me && me.role !== "candidate")) {
+        navigate("/candidate-auth");
+        return;
+      }
 
-      const [results, candidates] = await Promise.all(promises);
-      if (results.length > 0) setResult(results[0]);
-      if (candidates.length > 0 && candidates[0].full_name) setCurrentUserName(candidates[0].full_name);
+      let results = [];
+      let candidates = [];
+      try {
+        if (id) {
+          results = await quantaClient.entities.AssessmentResult.filter({ id });
+        } else {
+          results = await quantaClient.entities.AssessmentResult.filter({ candidate_email: candidateEmail });
+        }
+        candidates = await quantaClient.entities.Candidate.filter({ email: candidateEmail });
+      } catch (err) {
+        console.error("Error fetching assessment results:", err);
+      }
+
+      if (results && results.length > 0) {
+        results.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        setResult(results[0]);
+      } else {
+        navigate("/candidate/psych-test");
+        return;
+      }
+
+      if (candidates.length > 0 && candidates[0].full_name) {
+        setCurrentUserName(candidates[0].full_name);
+      }
       setLoading(false);
     };
 
-    fetchAll();
-  }, []);
+    init();
+  }, [navigate]);
 
   if (loading) return (
     <div className="min-h-screen bg-[#F8F7FF] flex items-center justify-center">
@@ -90,7 +116,12 @@ export default function PsychResults() {
     </div>
   );
 
-  const scores = TRAITS.map(t => ({ trait: t, score: result[`score_${t}`] || 0 }));
+  const scores = TRAITS.map(t => {
+    const val = t === "stability" 
+      ? (result.score_neuroticism !== undefined ? result.score_neuroticism : result.score_stability)
+      : result[`score_${t}`];
+    return { trait: t, score: val || 0 };
+  });
   const sorted = [...scores].sort((a, b) => b.score - a.score);
   const strengths = sorted.slice(0, 2);
   const growth = sorted.slice(-2).reverse();
@@ -110,7 +141,7 @@ export default function PsychResults() {
       </nav>
 
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 space-y-6">
-        <Link to="/candidate-dashboard" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <Link to="/candidate/dashboard" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </Link>
 
@@ -212,6 +243,13 @@ export default function PsychResults() {
             </div>
           </div>
         )}
+
+        {/* Back to Dashboard Button */}
+        <div className="flex justify-center pt-4">
+          <Link to="/candidate/dashboard" className="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-white font-medium rounded-xl h-11 px-6 transition-colors shadow-sm">
+            Back to Dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );
