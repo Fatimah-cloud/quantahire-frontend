@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Loader2, Save, Briefcase, BarChart2, Calendar, CheckCircle } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, Save, Briefcase, BarChart2, Calendar, CheckCircle, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -296,6 +296,31 @@ export default function RecruiterProfilePage() {
                   className="w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
+
+              {profile?.certificate_url && (
+                <div className="space-y-1.5 sm:col-span-2 mt-2">
+                  <Label className="text-muted-foreground font-semibold text-xs uppercase tracking-wider">Uploaded Certificate</Label>
+                  <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl select-none">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-foreground truncate">
+                        {decodeURIComponent(profile.certificate_url.split("/").pop())}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Verification document (read-only)</p>
+                    </div>
+                    <a
+                      href={profile.certificate_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline bg-primary/5 hover:bg-primary/10 px-4 py-2 rounded-xl border border-primary/20 transition-all shrink-0 cursor-pointer"
+                    >
+                      View / Download <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

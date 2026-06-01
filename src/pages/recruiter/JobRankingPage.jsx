@@ -707,11 +707,6 @@ export default function JobRankingPage() {
 
                         {/* Status Badge */}
                         <div className="shrink-0">
-                          {isShortlisted && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
-                              <Check className="w-2.5 h-2.5" /> Shortlisted
-                            </span>
-                          )}
                           {isRejected && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-full">
                               <X className="w-2.5 h-2.5" /> Rejected
