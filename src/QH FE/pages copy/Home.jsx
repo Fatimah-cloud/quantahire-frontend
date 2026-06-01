@@ -14,16 +14,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2">
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 relative">
       {/* Left side — branding */}
       <div className="relative flex items-center px-8 md:px-16 py-16 overflow-hidden bg-gradient-to-br from-[#EDE9FE] to-[#F5F3FF]">
         {/* Logo in top-left corner */}
-        <div className="absolute top-8 left-8 z-20">
-          <img 
-            src="https://media.quantahire.com/images/public/69e37c1ef6734d47b8621a83/d2e37d1a5_AI_Female_16.png" 
-            alt="QuantaHire Logo" 
-            className="w-12 h-12"
-          />
+        <div className="absolute top-8 left-8 z-20 flex items-center gap-2.5 select-none">
+          <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center shadow-lg shadow-purple-600/20">
+            <Briefcase className="w-5 h-5 text-white" strokeWidth={2} />
+          </div>
+          <span className="font-semibold text-lg text-purple-900 tracking-tight">QuantaHire</span>
         </div>
 
         {/* Animated gradient blobs */}
@@ -99,6 +98,14 @@ export default function Home() {
 
         </div>
       </div>
+
+      {/* Support email in bottom-left corner */}
+      <div className="absolute bottom-4 left-4 z-20 select-none pointer-events-none">
+        <p className="text-xs text-gray-400 flex items-center gap-1.5">
+          <span>📧</span> support@quantahire.com
+        </p>
+      </div>
     </div>
+
   );
 }

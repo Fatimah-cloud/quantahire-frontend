@@ -44,6 +44,20 @@ export default function JobRankingPage() {
   const [showBulkFeedbackModal, setShowBulkFeedbackModal] = useState(false);
   const [sendingBulkFeedback, setSendingBulkFeedback] = useState(false);
   const [loadingStatuses, setLoadingStatuses] = useState({});
+  const [rankingCompleted, setRankingCompleted] = useState(false);
+  const [expandedCandidates, setExpandedCandidates] = useState(new Set());
+
+  const toggleExpandCandidate = (id) => {
+    setExpandedCandidates((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const fetchJobAndApplications = async () => {
     try {
@@ -120,6 +134,7 @@ export default function JobRankingPage() {
       
       // Refresh candidates list
       await fetchJobAndApplications();
+      setRankingCompleted(true);
     } catch (error) {
       console.error("Error ranking candidates:", error);
       toast({
@@ -216,6 +231,7 @@ export default function JobRankingPage() {
       
       // 5. Refresh candidates list
       await fetchJobAndApplications();
+      setRankingCompleted(true);
       
       toast({
         title: "Re-ranking Complete",
@@ -431,10 +447,17 @@ export default function JobRankingPage() {
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
-      // Sort ranked candidates by score descending, others at bottom
-      const scoreA = a.match_score !== undefined && a.match_score !== null ? a.match_score : -1;
-      const scoreB = b.match_score !== undefined && b.match_score !== null ? b.match_score : -1;
-      return scoreB - scoreA;
+      if (rankingCompleted) {
+        // Sort ranked candidates by score descending, others at bottom
+        const scoreA = a.match_score !== undefined && a.match_score !== null ? a.match_score : -1;
+        const scoreB = b.match_score !== undefined && b.match_score !== null ? b.match_score : -1;
+        return scoreB - scoreA;
+      } else {
+        // Default sort by applied date descending
+        const dateA = a.created_date || a.upload_date || "";
+        const dateB = b.created_date || b.upload_date || "";
+        return dateB.localeCompare(dateA);
+      }
     });
 
   if (loading) {
@@ -665,7 +688,7 @@ export default function JobRankingPage() {
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-xl bg-accent text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                            {hasScore ? (
+                            {rankingCompleted && hasScore ? (
                               <span className="text-primary-700 font-extrabold">#{idx + 1}</span>
                             ) : (
                               <span>{cand.candidate_name[0].toUpperCase()}</span>
@@ -717,12 +740,23 @@ export default function JobRankingPage() {
                             </a>
                           )}
 
-                          {hasScore ? (
+                          {!rankingCompleted ? (
+                            <span className="text-gray-400 text-sm">Not ranked yet</span>
+                          ) : hasScore ? (
                             <span className="font-semibold text-muted-foreground">
                               Match: <strong className={cand.match_score >= 60 ? "text-green-600" : "text-amber-600"}>{cand.match_score}%</strong>
                             </span>
                           ) : (
                             <span className="text-muted-foreground italic">Match: Pending</span>
+                          )}
+
+                          {rankingCompleted && hasScore && (
+                            <button
+                              onClick={() => toggleExpandCandidate(cand.id)}
+                              className="text-primary hover:text-primary/80 font-semibold flex items-center gap-1 ml-1 cursor-pointer"
+                            >
+                              📊 {expandedCandidates.has(cand.id) ? "Hide AI Breakdown" : "View AI Breakdown"}
+                            </button>
                           )}
                         </div>
 
@@ -779,17 +813,80 @@ export default function JobRankingPage() {
                           </div>
 
                           {/* Send/Edit Feedback Button */}
-                          <Button
-                            variant={cand.feedback ? "secondary" : "default"}
-                            size="sm"
-                            onClick={() => handleOpenFeedbackModal(cand)}
-                            className="rounded-xl text-xs gap-1 h-8 px-3"
-                          >
-                            <MessageSquare className="w-3 h-3" />
-                            {cand.feedback ? "Edit Feedback" : "Send Feedback"}
-                          </Button>
+                          {rankingCompleted && (
+                            <Button
+                              variant={cand.feedback ? "secondary" : "default"}
+                              size="sm"
+                              onClick={() => handleOpenFeedbackModal(cand)}
+                              className="rounded-xl text-xs gap-1 h-8 px-3"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              {cand.feedback ? "Edit Feedback" : "Send Feedback"}
+                            </Button>
+                          )}
                         </div>
                       </div>
+
+                      {/* Expanded AI Breakdown Section */}
+                      {expandedCandidates.has(cand.id) && cand.rag_results && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 space-y-3.5 text-xs text-foreground select-text">
+                          {/* Explanation Box */}
+                          {cand.rag_results.ranking_reason && (
+                            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                              <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                AI Evaluation Explanation
+                              </h4>
+                              <p className="text-gray-600 leading-relaxed font-light">
+                                {cand.rag_results.ranking_reason}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Scores Grid */}
+                          {cand.rag_results.scores && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {[
+                                { label: "Work Experience", key: "work_exp" },
+                                { label: "Skills Alignment", key: "skills" },
+                                { label: "Educational Background", key: "education" },
+                                { label: "Certifications & Extra", key: "certifications" }
+                              ].map(({ label, key }) => {
+                                const score = cand.rag_results.scores[key] || 3;
+                                const reason = cand.rag_results.reasons?.[key] || "";
+                                return (
+                                  <div key={key} className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/60 flex flex-col justify-between space-y-1">
+                                    <div className="flex justify-between items-center">
+                                      <span className="font-medium text-gray-700">{label}</span>
+                                      <span className="bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                        {score} / 5
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Star indicators */}
+                                    <div className="flex gap-0.5">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <span
+                                          key={star}
+                                          className={`text-xs ${star <= score ? "text-amber-400" : "text-slate-200"}`}
+                                        >
+                                          ★
+                                        </span>
+                                      ))}
+                                    </div>
+
+                                    {reason && (
+                                      <p className="text-[10px] text-gray-500 italic leading-snug mt-1 font-light">
+                                        {reason}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

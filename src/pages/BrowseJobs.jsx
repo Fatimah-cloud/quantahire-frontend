@@ -114,20 +114,10 @@ export default function BrowseJobs() {
     });
     const applicationId = appData.id;
 
-    // 3. Show success immediately — AI processing runs in the background
+    // 3. Show success immediately
     setApplyUploading(false);
     setApplyDone(true);
     setAppliedJobIds((prev) => new Set([...prev, applyJob.id]));
-
-    // Fire-and-forget AI processing (doesn't block the user)
-    quantaClient.functions.invoke("processCV", {
-      cv_url: file_url,
-      application_id: applicationId,
-      job_id: applyJob.id,
-      job_title: applyJob.title,
-      job_description: applyJob.description || "",
-      job_skills: applyJob.skills || []
-    });
   };
 
   return (
@@ -342,7 +332,7 @@ export default function BrowseJobs() {
                     <CheckCircle className="w-8 h-8 text-green-500" />
                   </div>
                   <h2 className="text-xl font-bold text-foreground">Application Submitted!</h2>
-                  <p className="text-sm text-muted-foreground">Your CV has been analyzed and your application sent to the recruiter with your AI match score.</p>
+                  <p className="text-sm text-muted-foreground">Your application and CV have been successfully submitted to the recruiter.</p>
                   <Button className="w-full rounded-xl bg-primary hover:bg-primary/90" onClick={() => setApplyJob(null)}>Done</Button>
                 </div>
               ) : (
