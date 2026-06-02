@@ -534,21 +534,7 @@ export default function JobCard({ job, appCount, recruiterEmail, onJobUpdated, o
                         View Profile
                       </button>
                       
-                      <div className="shrink-0">
-                        {app.match_score !== undefined && app.match_score !== null ? (
-                          <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${
-                            app.match_score >= 80 ? "bg-green-50 text-green-700 border-green-200" :
-                            app.match_score >= 60 ? "bg-orange-50 text-orange-700 border-orange-200" :
-                            "bg-slate-50 text-slate-600 border-slate-200"
-                          }`}>
-                            Match Score: {app.match_score}%
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full border bg-slate-50 text-slate-400 border-slate-200 italic">
-                            Match Score: Pending
-                          </div>
-                        )}
-                      </div>
+                      {/* Match Score removed from dashboard view applicants list */}
                     </div>
                   </div>
                 ))}

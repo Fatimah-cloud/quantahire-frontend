@@ -127,6 +127,12 @@ export default function JobRankingPage() {
         throw new Error("Failed to rank candidates and generate feedback");
       }
 
+      const matchData = await matchResponse.json();
+      if (matchData.session_id) {
+        setSessionId(matchData.session_id);
+        localStorage.setItem(`session_id_${jobId}`, matchData.session_id);
+      }
+
       toast({
         title: "Success",
         description: "Ranking complete. Feedback generated for all candidates."
@@ -174,22 +180,6 @@ export default function JobRankingPage() {
         localStorage.setItem(`session_id_${jobId}`, activeSessionId);
       }
       
-      // 2. Fetch all CV records to get the cv_id -> file_url mapping
-      const cvResponse = await fetch("http://127.0.0.1:8000/api/cvs/", {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
-        }
-      });
-      if (!cvResponse.ok) {
-        throw new Error("Failed to fetch CV mapping records.");
-      }
-      const cvData = await cvResponse.json();
-      const cvsList = cvData.cvs || [];
-      const cvIdToUrlMap = {};
-      cvsList.forEach(cv => {
-        cvIdToUrlMap[cv.cv_id] = cv.file_url;
-      });
-      
       // 3. Send feedback to POST /api/match/{session_id}/feedback
       const feedbackResponse = await fetch(`http://127.0.0.1:8000/api/match/${activeSessionId}/feedback`, {
         method: "POST",
@@ -197,7 +187,7 @@ export default function JobRankingPage() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("qh_token")}`
         },
-        body: JSON.stringify({ feedback: feedbackText })
+        body: JSON.stringify({ feedback: feedbackText, job_id: jobId })
       });
       
       if (!feedbackResponse.ok) {
@@ -211,11 +201,8 @@ export default function JobRankingPage() {
       // 4. Update the candidate application documents in parallel
       await Promise.all(
         newResults.map(async (row) => {
-          const fileUrl = cvIdToUrlMap[row.cv_id];
-          if (!fileUrl) return;
-          
-          // Find matching application in state candidates
-          const matchingApp = candidates.find(c => c.cv_url === fileUrl);
+          // Find matching application in state candidates directly by application ID
+          const matchingApp = candidates.find(c => c.id === row.cv_id);
           if (matchingApp) {
             await quantaClient.entities.Application.update(matchingApp.id, {
               match_score: row.final_score,
