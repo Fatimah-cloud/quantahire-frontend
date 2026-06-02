@@ -118,7 +118,11 @@ export default function RecruiterAuth() {
       let certUrl = null;
       if (certFile) {
         try {
-          const { file_url } = await quantaClient.integrations.Core.UploadFile({ file: certFile });
+          const { file_url } = await quantaClient.integrations.Core.UploadFile({
+            file: certFile,
+            user_id: null,
+            job_id: null
+          });
           certUrl = file_url;
         } catch (uploadErr) {
           setErrors({ certFile: "Certificate upload failed. Please try again." });

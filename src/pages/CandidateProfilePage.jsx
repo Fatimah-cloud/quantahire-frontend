@@ -177,7 +177,11 @@ export default function CandidateProfilePage() {
     const file = e.target.files[0];
     if (!file) return;
     setPhotoUploading(true);
-    const { file_url } = await quantaClient.integrations.Core.UploadFile({ file });
+    const { file_url } = await quantaClient.integrations.Core.UploadFile({
+      file,
+      user_id: localStorage.getItem("candidateId"),
+      job_id: null
+    });
     setForm(f => ({ ...f, photo_url: file_url }));
     setPhotoUploading(false);
   };
@@ -187,8 +191,12 @@ export default function CandidateProfilePage() {
     if (!file) return;
     setCvUploading(true);
     try {
-      const userId = localStorage.getItem("qh_token");
-      const { file_url } = await quantaClient.integrations.Core.UploadFile({ file, user_id: userId });
+      const userId = localStorage.getItem("candidateId") || localStorage.getItem("qh_token");
+      const { file_url } = await quantaClient.integrations.Core.UploadFile({
+        file,
+        user_id: userId,
+        job_id: null
+      });
       const newCvData = {
         cv_url: file_url,
         cv_filename: file.name,

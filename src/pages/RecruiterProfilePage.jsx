@@ -68,7 +68,11 @@ export default function RecruiterProfilePage() {
     const file = e.target.files[0];
     if (!file) return;
     setPhotoUploading(true);
-    const { file_url } = await quantaClient.integrations.Core.UploadFile({ file });
+    const { file_url } = await quantaClient.integrations.Core.UploadFile({
+      file,
+      user_id: null,
+      job_id: null
+    });
     setForm(f => ({ ...f, photo_url: file_url }));
     setPhotoUploading(false);
   };

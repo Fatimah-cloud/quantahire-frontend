@@ -160,19 +160,32 @@ const auth = {
 
 const integrations = {
   Core: {
-    UploadFile: async ({ file }) => {
+    UploadFile: async ({ file, user_id, job_id }) => {
       const formData = new FormData();
       formData.append("file", file);
-      
+      if (user_id) {
+        formData.append("user_id", user_id);
+      }
+      if (job_id) {
+        formData.append("job_id", job_id);
+      }
+
+      const token = localStorage.getItem("qh_token");
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch("http://localhost:8000/api/upload/", {
         method: "POST",
+        headers,
         body: formData
       });
-      
+
       if (!response.ok) {
         throw new Error("File upload failed");
       }
-      
+
       return await response.json();
     },
     SendEmail: async (payload) => {

@@ -100,7 +100,11 @@ export default function BrowseJobs() {
     setApplyUploading(true);
 
     // 1. Upload CV
-    const { file_url } = await quantaClient.integrations.Core.UploadFile({ file: applyFile });
+    const { file_url } = await quantaClient.integrations.Core.UploadFile({
+      file: applyFile,
+      user_id: localStorage.getItem("candidateId"),
+      job_id: applyJob?.id
+    });
 
     // 2. Create application record in QuantaHire
     const appData = await quantaClient.entities.Application.create({
