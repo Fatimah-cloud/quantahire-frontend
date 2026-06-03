@@ -131,9 +131,6 @@ export default function AdminAuth() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline transition-colors">
-                    Forgot Password?
-                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

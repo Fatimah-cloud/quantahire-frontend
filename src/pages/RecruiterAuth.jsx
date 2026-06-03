@@ -399,9 +399,6 @@ export default function RecruiterAuth() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="password">Password</Label>
-                      <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline transition-colors">
-                        Forgot Password?
-                      </Link>
                     </div>
                     <div className="relative">
                       <Input
